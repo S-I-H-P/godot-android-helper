@@ -18,10 +18,10 @@ jobs:
       - name: Setup Android
         uses: android-actions/setup-android@v3
 
-      - name: Accept licenses and install NDK + CMake
+      - name: Install SDK packages
         run: |
           yes | sdkmanager --licenses
-          sdkmanager "ndk;26.1.10909125" "cmake;3.22.1"
+          sdkmanager "platforms;android-34" "build-tools;34.0.0" "ndk;26.1.10909125" "cmake;3.22.1"
 
       - name: Install Gradle 8.7
         run: |
