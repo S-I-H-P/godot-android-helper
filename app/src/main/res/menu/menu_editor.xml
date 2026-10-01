@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/action_save"
+        android:title="@string/action_save"
+        android:icon="@drawable/ic_save"
+        app:showAsAction="ifRoom" />
+
+    <item
+        android:id="@+id/action_new_script"
+        android:title="@string/action_new_script"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_toggle_comment"
+        android:title="@string/action_toggle_comment"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_indent"
+        android:title="@string/action_indent"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_outdent"
+        android:title="@string/action_outdent"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_goto_line"
+        android:title="@string/action_goto_line"
+        app:showAsAction="never" />
+
+</menu>

@@ -1,0 +1,35 @@
+// Godot 开发助手 - 项目级构建配置
+// 作者: Agnes Assistant
+// 用途: 通过 SAF 管理 Godot 项目，提供 GDScript 编辑器与离线文档
+
+buildscript {
+    ext {
+        kotlin_version = '1.9.22'
+        appcompat_version = '1.6.1'
+        material_version = '1.11.0'
+        constraintlayout_version = '2.1.4'
+        coroutines_version = '1.7.3'
+        navigation_version = '2.7.6'
+        room_version = '2.6.1'
+        lifecycle_version = '2.7.0'
+        viewmodel_version = '2.6.2'
+    }
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.2.2'
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+}
+
+plugins {
+    id 'com.android.application' version '8.2.2' apply false
+    id 'com.android.library' version '8.2.2' apply false
+    id 'org.jetbrains.kotlin.android' version '1.9.22' apply false
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}

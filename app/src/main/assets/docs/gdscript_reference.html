@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GDScript 语法完整参考</title>
+<style>
+:root {
+  --bg: #1E1E2E; --text: #CDD6F4; --accent: #4A90D9;
+  --keyword: #C792EA; --string: #A5E075; --comment: #6272A4;
+  --code-bg: #181825; --border: #313244;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, "Segoe UI", "Noto Sans SC", sans-serif;
+  background: var(--bg); color: var(--text); line-height: 1.65;
+  padding: 16px 14px 64px; max-width: 860px; margin: 0 auto;
+}
+h1 { color: var(--accent); font-size: 1.5em; border-bottom: 2px solid var(--accent); padding-bottom: 8px; margin: 20px 0 14px; }
+h2 { color: #89B4FA; font-size: 1.2em; margin: 22px 0 10px; border-left: 3px solid var(--accent); padding-left: 8px; }
+h3 { color: #A6E3A1; font-size: 1.05em; margin: 16px 0 8px; }
+p { margin: 8px 0; }
+pre {
+  background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px; overflow-x: auto; margin: 10px 0; font-size: 13px;
+}
+code {
+  font-family: "JetBrains Mono", Consolas, "Courier New", monospace;
+  background: var(--code-bg); padding: 1px 5px; border-radius: 4px; color: #F5C2E7;
+}
+pre code { background: none; padding: 0; color: #CDD6F4; }
+table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 13px; }
+th, td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; vertical-align: top; }
+th { background: #313244; color: #CDD6F4; }
+tr:nth-child(even) td { background: #232338; }
+li { margin: 3px 0 3px 18px; }
+ul, ol { margin: 6px 0; }
+hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+</style>
+</head>
+<body>
+<h1>GDScript 参考</h1>
+
+<p>GDScript 是 Godot 引擎的高层、面向对象、命令式、渐进式类型编程语言，基于 Python 式的缩进语法。它的目标是与 Godot 引擎深度集成，为内容创建和整合提供最大灵活性。GDScript 完全独立于 Python，不基于它。</p>
+
+<h2>脚本示例</h2>
+
+<pre><code># 注释以 # 开头
+
+# 一个文件就是一个类！
+
+# 可选的图标
+@icon(&quot;res://path/to/optional/icon.svg&quot;)
+
+# 可选的类定义
+class_name MyClass
+
+# 继承
+extends BaseClass
+
+# 成员变量
+var a = 5
+var s = &quot;Hello&quot;
+var arr = [1, 2, 3]
+var dict = {&quot;key&quot;: &quot;value&quot;, 2: 3}
+var typed_var: int
+var inferred_type := &quot;String&quot;
+
+# 常量
+const ANSWER = 42
+const THE_NAME = &quot;Charly&quot;
+
+# 枚举
+enum {UNIT_NEUTRAL, UNIT_ENEMY, UNIT_ALLY}
+enum Named {THING_1, THING_2, ANOTHER_THING = -1}
+
+# 函数
+func some_function(param1, param2, param3 = 123):
+    if param1 &lt; 5:
+        print(param1)
+    elif param2 &gt; 5:
+        print(param2)
+    else:
+        print(&quot;Fail!&quot;)
+
+    for i in range(20):
+        print(i)
+
+    while param2 != 0:
+        param2 -= 1
+
+    var local_var = param1 + 3
+    return local_var</code></pre>
+
+<h2>标识符</h2>
+
+<p>任何由字母（a-z, A-Z）、数字（0-9）和下划线（_）组成的字符串都是标识符。标识符不能以数字开头。标识符区分大小写（foo 与 FOO 不同）。</p>
+
+<h2>关键字</h2>
+
+<table>
+<tr><th>关键字</th><th>说明</th></tr>
+<tr><td>if / elif / else</td><td>条件分支</td></tr>
+<tr><td>for / while</td><td>循环</td></tr>
+<tr><td>break</td><td>退出当前循环</td></tr>
+<tr><td>continue</td><td>跳到下一次迭代</td></tr>
+<tr><td>pass</td><td>空语句占位</td></tr>
+<tr><td>return</td><td>从函数返回值</td></tr>
+<tr><td>class</td><td>定义内部类</td></tr>
+<tr><td>class_name</td><td>将脚本注册为全局类</td></tr>
+<tr><td>extends</td><td>定义继承的类</td></tr>
+<tr><td>is</td><td>类型检查</td></tr>
+<tr><td>in</td><td>包含检查 / 用于 for 迭代</td></tr>
+<tr><td>as</td><td>类型转换</td></tr>
+<tr><td>self</td><td>当前类实例</td></tr>
+<tr><td>super</td><td>父类方法作用域</td></tr>
+<tr><td>signal</td><td>定义信号</td></tr>
+<tr><td>func</td><td>定义函数</td></tr>
+<tr><td>static</td><td>静态函数或静态成员变量</td></tr>
+<tr><td>const</td><td>定义常量</td></tr>
+<tr><td>enum</td><td>定义枚举</td></tr>
+<tr><td>var</td><td>定义变量</td></tr>
+<tr><td>breakpoint</td><td>编辑器调试断点辅助</td></tr>
+<tr><td>preload</td><td>预加载类或变量</td></tr>
+<tr><td>await</td><td>等待信号或协程完成</td></tr>
+<tr><td>assert</td><td>断言条件，失败时记录错误</td></tr>
+<tr><td>void</td><td>函数不返回任何值</td></tr>
+<tr><td>PI</td><td>圆周率常量</td></tr>
+<tr><td>TAU</td><td>TAU 常量</td></tr>
+<tr><td>INF</td><td>无穷大常量</td></tr>
+<tr><td>NAN</td><td>非数字常量</td></tr>
+</table>
+
+<h2>运算符优先级</h2>
+
+<p>从高到低：</p>
+
+<table>
+<tr><th>运算符</th><th>说明</th></tr>
+<tr><td>( )</td><td>分组（最高优先级）</td></tr>
+<tr><td>x[index]</td><td>下标访问</td></tr>
+<tr><td>x.attribute</td><td>属性引用</td></tr>
+<tr><td>foo()</td><td>函数调用</td></tr>
+<tr><td>await x</td><td>等待协程</td></tr>
+<tr><td>x is Node</td><td>类型检查</td></tr>
+<tr><td>x ** y</td><td>幂运算</td></tr>
+<tr><td>~x</td><td>按位取反</td></tr>
+<tr><td>+x -x</td><td>正/负数</td></tr>
+<tr><td>x * y x / y x % y</td><td>乘法/除法/取余</td></tr>
+<tr><td>x + y x - y</td><td>加法（或拼接）/减法</td></tr>
+<tr><td>x &lt;&lt; y x &gt;&gt; y</td><td>位移动</td></tr>
+<tr><td>x &amp; y</td><td>按位与</td></tr>
+<tr><td>x ^ y</td><td>按位异或</td></tr>
+<tr><td>x \</td><td>y</td><td>按位或</td></tr>
+<tr><td>== != &lt; &gt; &lt;= &gt;=</td><td>比较</td></tr>
+<tr><td>x in y</td><td>包含检查</td></tr>
+<tr><td>not x !x</td><td>布尔非</td></tr>
+<tr><td>x and y &amp;&amp;</td><td>布尔与</td></tr>
+<tr><td>x or y \</td><td>\</td><td></td><td>布尔或</td></tr>
+<tr><td>true if cond else false</td><td>三元运算符</td></tr>
+<tr><td>x as Node</td><td>类型转换</td></tr>
+<tr><td>= += -= *= /= **=</td><td>赋值（最低优先级）</td></tr>
+</table>
+
+<p>注意：如果 <code>/</code> 运算符两个操作数都是 int，执行整数除法。例如 <code>5 / 2 == 2</code>，而 <code>5.0 / 2 == 2.5</code>。取余运算符 <code>%</code> 也用于格式字符串。</p>
+
+<h2>字面量</h2>
+
+<h3>整数与浮点数</h3>
+<pre><code>var x = 42          # 十进制整数
+var y = 0x1F        # 十六进制（31）
+var z = 3.14        # 浮点数
+var f = 1.0e6       # 科学计数法
+var neg = -5        # 负数</code></pre>
+
+<h3>字符串</h3>
+<pre><code>var s1 = &quot;双引号字符串&quot;
+var s2 = &#x27;单引号字符串&#x27;
+var s3 = &quot;&quot;&quot;多行
+字符串&quot;&quot;&quot;
+var raw = r&quot;原始字符串\n不会转义&quot;</code></pre>
+
+<h3>布尔与空</h3>
+<pre><code>var t = true
+var f = false
+var n = null</code></pre>
+
+<h2>变量</h2>
+
+<p>GDScript 是动态类型语言，但支持可选类型标注：</p>
+
+<pre><code>var a                        # 动态类型
+var b := 10                  # 自动推断为 int
+var c: int = 10              # 显式类型
+var d: String = &quot;text&quot;
+var e: Array[int] = [1,2,3]
+var f: Dictionary = {&quot;k&quot;: &quot;v&quot;}
+
+# 带 setter/getter 的属性
+var health: int = 100:
+    get:
+        return health
+    set(value):
+        health = clamp(value, 0, 100)</code></pre>
+
+<h2>常量与枚举</h2>
+
+<pre><code>const MAX_SPEED = 1000
+const DEFAULT_NAME = &quot;Player&quot;
+
+enum Direction {
+    UP,
+    DOWN,
+    LEFT,
+    RIGHT,
+}
+
+# 使用枚举
+var dir = Direction.UP</code></pre>
+
+<h2>函数</h2>
+
+<pre><code># 基本函数
+func add(a, b):
+    return a + b
+
+# 带类型标注
+func heal(amount: int) -&gt; int:
+    health += amount
+    return health
+
+# 默认参数
+func greet(name: String = &quot;World&quot;) -&gt; String:
+    return &quot;Hello &quot; + name
+
+# 可变参数
+func sum_all(...args) -&gt; int:
+    var total = 0
+    for arg in args:
+        total += arg
+    return total
+
+# 静态函数
+static func create() -&gt; Node:
+    return Node.new()</code></pre>
+
+<h2>内建类型</h2>
+
+<table>
+<tr><th>类型</th><th>说明</th></tr>
+<tr><td>int</td><td>整数</td></tr>
+<tr><td>float</td><td>浮点数</td></tr>
+<tr><td>bool</td><td>布尔值</td></tr>
+<tr><td>String</td><td>字符串</td></tr>
+<tr><td>Vector2 / Vector2i</td><td>2D 向量</td></tr>
+<tr><td>Vector3 / Vector3i</td><td>3D 向量</td></tr>
+<tr><td>Vector4</td><td>4D 向量</td></tr>
+<tr><td>Color</td><td>RGBA 颜色</td></tr>
+<tr><td>Rect2 / Rect2i</td><td>2D 矩形</td></tr>
+<tr><td>Transform2D</td><td>2D 变换</td></tr>
+<tr><td>AABB</td><td>轴对齐包围盒</td></tr>
+<tr><td>Plane</td><td>3D 平面</td></tr>
+<tr><td>Quaternion</td><td>四元数（旋转）</td></tr>
+<tr><td>Basis</td><td>3x3 基（旋转/缩放）</td></tr>
+<tr><td>Transform3D</td><td>3D 变换</td></tr>
+<tr><td>Array</td><td>动态数组</td></tr>
+<tr><td>Dictionary</td><td>键值对</td></tr>
+<tr><td>NodePath</td><td>节点路径</td></tr>
+<tr><td>RID</td><td>资源 ID</td></tr>
+<tr><td>Callable</td><td>可调用对象</td></tr>
+<tr><td>Signal</td><td>信号引用</td></tr>
+<tr><td>StringName</td><td>字符串名（共享内存）</td></tr>
+</table>
+
+<h2>数组与字典</h2>
+
+<pre><code># 数组
+var arr = [1, 2, 3]
+arr.append(4)
+arr[0] = 10
+print(arr.size())
+
+# 类型化数组
+var ints: Array[int] = []
+ints.append(1)
+
+# 字典
+var dict = {&quot;name&quot;: &quot;Godot&quot;, &quot;version&quot;: 4.0}
+dict[&quot;author&quot;] = &quot;Community&quot;
+print(dict.size())
+
+# 常用方法
+arr.sort()
+arr.reverse()
+arr.has(10)
+arr.find(2)
+arr.slice(1, 3)
+
+dict.keys()
+dict.values()
+dict.has(&quot;name&quot;)
+dict.get(&quot;name&quot;, &quot;default&quot;)</code></pre>
+
+<h2>控制流</h2>
+
+<pre><code># if / elif / else
+if score &gt;= 100:
+    print(&quot;通关！&quot;)
+elif score &gt;= 50:
+    print(&quot;继续努力&quot;)
+else:
+    print(&quot;加油&quot;)
+
+# match 模式匹配
+match command:
+    &quot;attack&quot;:
+        attack()
+    0:
+        print(&quot;数字零&quot;)
+    var something:
+        print(&quot;其他值: &quot;, something)
+    _:
+        print(&quot;默认分支&quot;)
+
+# for 循环
+for i in range(10):
+    print(i)
+
+for item in inventory:
+    print(item)
+
+for key in dict:
+    print(key, dict[key])
+
+# while 循环
+var count = 0
+while count &lt; 10:
+    count += 1</code></pre>
+
+<h2>信号</h2>
+
+<pre><code># 声明信号
+signal health_changed(new_value)
+signal died
+
+# 发射信号
+func take_damage(amount):
+    health -= amount
+    health_changed.emit(health)
+
+# 连接信号
+func _ready():
+    health_changed.connect(_on_health_changed)
+    health_changed.connect(_on_health_changed.bind(&amp;&quot;extra参数&quot;))
+
+func _on_health_changed(new_value):
+    print(&quot;血量为: &quot;, new_value)</code></pre>
+
+<h2>生命周期回调（虚函数）</h2>
+
+<table>
+<tr><th>回调</th><th>说明</th></tr>
+<tr><td>_init()</td><td>对象初始化（构造函数）</td></tr>
+<tr><td>_ready()</td><td>节点进入场景树后调用</td></tr>
+<tr><td>_process(delta)</td><td>每帧调用，delta 为帧时间</td></tr>
+<tr><td>_physics_process(delta)</td><td>物理帧调用（默认 60Hz）</td></tr>
+<tr><td>_input(event)</td><td>收到输入事件时</td></tr>
+<tr><td>_unhandled_input(event)</td><td>未处理的输入事件</td></tr>
+<tr><td>_exit_tree()</td><td>节点离开场景树</td></tr>
+<tr><td>_enter_tree()</td><td>节点进入场景树时（先于 _ready）</td></tr>
+</table>
+
+<h2>继承与类</h2>
+
+<pre><code># 继承语法
+extends Node2D
+class_name Player
+
+# 覆盖父类方法
+func _ready():
+    super._ready()  # 调用父类版本
+    print(&quot;Player 准备就绪&quot;)
+
+# 多态
+func attack():
+    pass</code></pre>
+
+<h2>注解（Annotations）</h2>
+
+<table>
+<tr><th>注解</th><th>说明</th></tr>
+<tr><td>@export</td><td>在编辑器中暴露变量</td></tr>
+<tr><td>@onready</td><td>在 _ready 时获取节点</td></tr>
+<tr><td>@tool</td><td>脚本在编辑器中运行</td></tr>
+<tr><td>@icon(path)</td><td>设置脚本图标</td></tr>
+<tr><td>@warning_ignore</td><td>忽略警告</td></tr>
+<tr><td>@rpc</td><td>网络 RPC 声明</td></tr>
+</table>
+
+<pre><code>extends CharacterBody2D
+
+@export var speed: float = 300.0
+@onready var sprite: Sprite2D = $Sprite2D
+
+func _ready():
+    print(sprite.texture)</code></pre>
+
+<h2>0. 完整示例：经典 2D 玩家</h2>
+
+</body>
+</html>

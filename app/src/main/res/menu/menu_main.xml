@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/action_refresh"
+        android:title="@string/action_refresh"
+        android:icon="@drawable/ic_refresh"
+        app:showAsAction="ifRoom" />
+
+    <item
+        android:id="@+id/action_select_dir"
+        android:title="@string/action_select_dir"
+        android:icon="@drawable/ic_folder_open"
+        app:showAsAction="ifRoom" />
+
+    <item
+        android:id="@+id/action_docs"
+        android:title="@string/action_docs"
+        android:icon="@drawable/ic_doc"
+        app:showAsAction="ifRoom" />
+
+    <item
+        android:id="@+id/action_settings"
+        android:title="@string/action_settings"
+        android:icon="@drawable/ic_settings"
+        app:showAsAction="never" />
+
+</menu>
