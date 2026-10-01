@@ -24,7 +24,7 @@ set(SOURCES
     # 核心工具类
     src/file_utils.cpp
     src/project_scanner.cpp
-    src/gdscript_analyzer.cpp
+
     src/tokenizer.cpp
     src/completion_engine.cpp
     src/syntax_highlighter.cpp
