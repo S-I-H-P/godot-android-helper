@@ -1,4 +1,8 @@
 /**
+#include <unordered_set>
+#include <sstream>
+#include <unordered_set>
+#include <sstream>
  * @file syntax_highlighter.h
  * @brief GDScript 语法高亮器：为编辑器提供着色信息
  * @author Agnes Assistant

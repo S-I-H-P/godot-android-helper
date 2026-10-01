@@ -65,7 +65,7 @@ std::vector<HighlightRange> SyntaxHighlighter::highlight(const std::string& sour
         // 注释
         size_t commentPos = line.find('#');
         if (commentPos != std::string::npos) {
-            ranges.push_back({lineStart + commentPos, lineStart + line.size(), HighlightType::COMMENT});
+            ranges.push_back({lineStart + commentPos, static_cast<int>(lineStart + line.size()), HighlightType::COMMENT});
         }
 
         // 字符串（简化处理）
@@ -75,7 +75,7 @@ std::vector<HighlightRange> SyntaxHighlighter::highlight(const std::string& sour
                 i++;
                 while (i < line.size() && line[i] != '"') i++;
                 if (i < line.size()) i++;
-                ranges.push_back({lineStart + start, lineStart + i, HighlightType::STRING});
+                ranges.push_back({lineStart + start, static_cast<int>(lineStart + i), HighlightType::STRING});
                 i--;  // for 循环会再++
             }
         }
@@ -91,7 +91,7 @@ std::vector<HighlightRange> SyntaxHighlighter::highlight(const std::string& sour
             {"const", HighlightType::KEYWORD}, {"func", HighlightType::KEYWORD},
             {"extends", HighlightType::CLASS_DEF}, {"self", HighlightType::KEYWORD},
             {"true", HighlightType::CONSTANT}, {"false", HighlightType::CONSTANT},
-            {"null", HighlightType::NULL_VALUE}, {"async", HighlightType::KEYWORD},
+            {"null", HighlightType::CONSTANT}, {"async", HighlightType::KEYWORD},
             {"await", HighlightType::KEYWORD}, {"match", HighlightType::KEYWORD},
             {"when", HighlightType::KEYWORD}, {"and", HighlightType::KEYWORD},
             {"or", HighlightType::KEYWORD}, {"not", HighlightType::KEYWORD},
@@ -111,7 +111,7 @@ std::vector<HighlightRange> SyntaxHighlighter::highlight(const std::string& sour
                     isWord = false;
                 }
                 if (isWord) {
-                    ranges.push_back({lineStart + pos, lineStart + pos + pair.first.size(), pair.second});
+                    ranges.push_back({static_cast<int>(lineStart + pos), static_cast<int>(lineStart + pos + pair.first.size()), pair.second});
                 }
                 pos += pair.first.size();
             }

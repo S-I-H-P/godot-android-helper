@@ -1,4 +1,10 @@
 /**
+#include <sys/stat.h>
+#include <sstream>
+#include <regex>
+#include <sys/stat.h>
+#include <sstream>
+#include <regex>
  * @file project_scanner.cpp
  * @brief Godot 项目扫描器实现
  * @author Agnes Assistant
