@@ -42,7 +42,7 @@ void DocIndexer::loadDocsRecursive(const std::string& dirPath, int level) {
         if (S_ISDIR(st.st_mode)) {
             // 递归扫描子目录
             loadDocsRecursive(fullPath, level + 1);
-        } else if (entry.ends_with(".html")) {
+        } else if ((entry.size() >= 5 && entry.substr(entry.size() - 5) == ".html")) {
             // 解析 HTML 文档
             DocEntry doc = parseDocFile(fullPath);
             if (!doc.id.empty()) {

@@ -12,6 +12,7 @@
 
 #include "godot/project_scanner.h"
 #include "godot/file_utils.h"
+#include <functional>
 #include <algorithm>
 #include <regex>
 

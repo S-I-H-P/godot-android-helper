@@ -1,57 +1,47 @@
-package com.godot.devassistant.native
+package com.godot.devassistant.`native`
 
 import android.content.Context
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
-import org.json.JSONArray
-import org.json.JSONObject
 
 /**
- * 原生库桥接类（纯 Kotlin 实现，不依赖 C++）
+ * 原生库桥接类
+ * 通过 JNI 调用 C++ 核心逻辑
  */
 object NativeLib {
 
-    private val gson = Gson()
-
-    fun init(context: Context) {
-        // 纯 Kotlin 版本无需初始化
+    init {
+        System.loadLibrary("godot-dev-assistant")
     }
 
-    fun scanProjects(baseDir: String): String {
-        return "[]"
-    }
+    @JvmStatic
+    external fun init(context: Context)
 
-    fun readFile(filePath: String): String? {
-        return null
-    }
+    @JvmStatic
+    external fun scanProjects(baseDir: String): String
 
-    fun writeFile(filePath: String, content: String): Boolean {
-        return false
-    }
+    @JvmStatic
+    external fun readFile(filePath: String): String?
 
-    fun highlightCode(code: String): String {
-        return "[]"
-    }
+    @JvmStatic
+    external fun writeFile(filePath: String, content: String): Boolean
 
-    fun getCompletions(code: String): String {
-        return "[]"
-    }
+    @JvmStatic
+    external fun highlightCode(code: String): String
 
-    fun searchDocs(keyword: String): String {
-        return "[]"
-    }
+    @JvmStatic
+    external fun getCompletions(code: String): String
 
-    fun getDocContent(docId: String): String? {
-        return null
-    }
+    @JvmStatic
+    external fun searchDocs(keyword: String): String
 
-    fun getAllDocIds(): String {
-        return "[\"gdscript_reference\"]"
-    }
+    @JvmStatic
+    external fun getDocContent(docId: String): String?
 
-    fun saveSetting(key: String, value: String) {}
+    @JvmStatic
+    external fun getAllDocIds(): String
 
-    fun getSetting(key: String, defaultValue: String): String {
-        return defaultValue
-    }
+    @JvmStatic
+    external fun saveSetting(key: String, value: String)
+
+    @JvmStatic
+    external fun getSetting(key: String, defaultValue: String): String
 }

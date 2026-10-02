@@ -30,7 +30,8 @@ enum class HighlightType : uint8_t {
     SIGNAL,        // 信号：signal xxx
     SIGNAL_CONN,   // 连接调用：connect(), emit_signal()
     CLASS_DEF,     // 类定义：class_name, extends
-    CONSTANT,      // 常量
+    CONSTANT,
+    NULL_VALUE,      // 常量
     IDENTIFIER,    // 普通标识符
     OPERATOR,      // 运算符
     PUNCTUATION,   // 标点符号
