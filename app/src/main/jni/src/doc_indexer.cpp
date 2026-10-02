@@ -5,6 +5,8 @@
  */
 
 #include "godot/doc_indexer.h"
+#include <sys/stat.h>
+#include <fstream>
 #include "godot/file_utils.h"
 #include <fstream>
 #include <sstream>

@@ -5,6 +5,8 @@
  */
 
 #include "godot/settings_manager.h"
+#include <android/log.h>
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, "GodotDev", __VA_ARGS__)
 #include <android/native_activity.h>
 #include <android/log.h>
 #include <sys/stat.h>

@@ -5,6 +5,8 @@
  */
 
 #include "godot/syntax_highlighter.h"
+#include <sstream>
+#include <unordered_set>
 #include <unordered_set>
 
 namespace godot {
@@ -65,7 +67,7 @@ std::vector<HighlightRange> SyntaxHighlighter::highlight(const std::string& sour
         // 注释
         size_t commentPos = line.find('#');
         if (commentPos != std::string::npos) {
-            ranges.push_back({lineStart + commentPos, static_cast<int>(lineStart + line.size()), HighlightType::COMMENT});
+            ranges.push_back({static_cast<int>(lineStart + commentPos), static_cast<int>(lineStart + line.size()), HighlightType::COMMENT});
         }
 
         // 字符串（简化处理）
@@ -75,7 +77,7 @@ std::vector<HighlightRange> SyntaxHighlighter::highlight(const std::string& sour
                 i++;
                 while (i < line.size() && line[i] != '"') i++;
                 if (i < line.size()) i++;
-                ranges.push_back({lineStart + start, static_cast<int>(lineStart + i), HighlightType::STRING});
+                ranges.push_back({static_cast<int>(lineStart + start), static_cast<int>(lineStart + i), HighlightType::STRING});
                 i--;  // for 循环会再++
             }
         }
