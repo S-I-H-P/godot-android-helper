@@ -81,6 +81,11 @@ class MainActivity : AppCompatActivity() {
         viewModel.projects.observe(this) { projects ->
             projectAdapter.submitList(projects)
             binding.emptyView.visibility = if (projects.isEmpty()) View.VISIBLE else View.GONE
+            if (projects.isEmpty()) {
+                binding.emptyView.setOnClickListener {
+                    openTreeLauncher.launch(SafFileManager.createOpenTreeIntent())
+                }
+            }
         }
 
         viewModel.isLoading.observe(this) { isLoading ->
