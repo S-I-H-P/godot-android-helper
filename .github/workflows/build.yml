@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main, master ]
   pull_request:
-  workflow_dispatch:      # 支持手动触发
+  workflow_dispatch:
 
 jobs:
   build:
@@ -20,13 +20,18 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 设置 Android SDK
-        uses: android-actions/setup-android@v3
+      # 不使用 setup-android，直接用 runner 预装的 SDK
+      - name: 配置 Android 环境
+        run: |
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
 
       - name: 安装 NDK 和 CMake
         run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
           sdkmanager --install "ndk;25.2.9519653" "cmake;3.22.1"
-          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/25.2.9519653" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653" >> $GITHUB_ENV
 
       - name: 缓存 Gradle
         uses: actions/cache@v4
@@ -44,7 +49,7 @@ jobs:
       - name: 构建 Debug APK
         run: ./gradlew assembleDebug --stacktrace
 
-      - name: 上传 APK 产物
+      - name: 上传 APK
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
