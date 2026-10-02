@@ -9,18 +9,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.IOException
 
-/**
- * SAF（Storage Access Framework）文件管理器
- *
- * 使用 DocumentFile API（更可靠的子文档权限管理）
- */
 object SafFileManager {
 
     private const val TAG = "SafFileManager"
     private const val PREFS_NAME = "saf_uris"
     private const val KEY_ROOT_URI = "root_uri"
 
-    /** 请求目录权限的 Intent */
     fun createOpenTreeIntent(): Intent {
         return Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -30,9 +24,6 @@ object SafFileManager {
         }
     }
 
-    /**
-     * 保存目录授权（持久化）
-     */
     fun persistTreePermission(context: Context, treeUri: Uri): String {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         try {
@@ -41,7 +32,6 @@ object SafFileManager {
                 Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             )
             prefs.edit().putString(KEY_ROOT_URI, treeUri.toString()).apply()
-            Log.d(TAG, "已持久化目录授权: $treeUri")
             return treeUri.toString()
         } catch (e: SecurityException) {
             Log.e(TAG, "持久化授权失败", e)
@@ -49,36 +39,17 @@ object SafFileManager {
         }
     }
 
-    /**
-     * 获取已保存的根目录 URI
-     */
     fun getSavedRootUri(context: Context): Uri? {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val uriStr = prefs.getString(KEY_ROOT_URI, null) ?: return null
         return Uri.parse(uriStr)
     }
 
-    /**
-     * 清除已保存的目录授权
-     */
     fun clearSavedRootUri(context: Context) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit().remove(KEY_ROOT_URI).apply()
     }
 
-    /**
-     * 将 tree URI 转换为 DocumentFile
-     */
-    fun treeToDocumentFile(context: Context, treeUri: Uri): DocumentFile? {
-        return DocumentFile.fromTreeUri(context, treeUri)
-    }
-
-    /**
-     * 递归扫描整个目录树，查找所有 Godot 项目
-     *
-     * 判定规则：子文件夹内存在 project.godot 文件即视为项目，
-     * 项目名取文件夹名。
-     */
     suspend fun scanForGodotProjects(
         context: Context,
         rootUri: Uri,
@@ -101,13 +72,12 @@ object SafFileManager {
     ) {
         if (depth > maxDepth) return
 
-        var subDirs = parentDoc.listFiles()
+        val subDirs = parentDoc.listFiles()
         if (subDirs.isEmpty()) return
 
         for (entry in subDirs) {
             if (!entry.isDirectory) continue
 
-            // 检查子目录内是否有 project.godot
             val projectFile = entry.findFile("project.godot")
             if (projectFile != null) {
                 result.add(GodotProjectInfo(
@@ -116,15 +86,11 @@ object SafFileManager {
                     projectFileUri = projectFile.uri
                 ))
             } else if (depth < maxDepth) {
-                // 递归扫描子目录
                 scanRecursive(context, entry, depth + 1, maxDepth, result)
             }
         }
     }
 
-    /**
-     * 列出项目内所有 .gd 脚本
-     */
     suspend fun listScriptsInProject(
         context: Context,
         projectUri: Uri
@@ -144,13 +110,12 @@ object SafFileManager {
         if (depth > maxDepth) return
 
         val doc = DocumentFile.fromTreeUri(context, dirUri) ?: return
-        var files = doc.listFiles()
+        val files = doc.listFiles()
         if (files.isEmpty()) return
 
         for (entry in files) {
             val name = entry.name ?: continue
             if (entry.isDirectory) {
-                // 跳过 .godot 缓存目录和隐藏目录
                 if (!name.startsWith(".")) {
                     collectScripts(context, entry.uri, result, depth + 1, maxDepth)
                 }
@@ -160,9 +125,6 @@ object SafFileManager {
         }
     }
 
-    /**
-     * 读取文件内容（通过 SAF）
-     */
     suspend fun readFile(context: Context, fileUri: Uri): String =
         withContext(Dispatchers.IO) {
             try {
@@ -175,9 +137,6 @@ object SafFileManager {
             }
         }
 
-    /**
-     * 写入文件内容（通过 SAF）
-     */
     suspend fun writeFile(context: Context, fileUri: Uri, content: String): Boolean =
         withContext(Dispatchers.IO) {
             try {
@@ -191,10 +150,6 @@ object SafFileManager {
             }
         }
 
-    /**
-     * 创建新文件
-     * @return 新文件的 Uri，失败返回 null
-     */
     suspend fun createFile(
         context: Context,
         parentUri: Uri,
@@ -216,14 +171,11 @@ object SafFileManager {
         }
     }
 
-    /**
-     * 删除文件
-     */
     suspend fun deleteFile(context: Context, fileUri: Uri): Boolean =
         withContext(Dispatchers.IO) {
             try {
-                val doc = DocumentFile.fromFileUri(context, fileUri)
-                doc?.delete() ?: false
+                // 用 contentResolver 方式删除，避免 fromFileUri 不存在的问题
+                context.contentResolver.delete(fileUri, null, null) > 0
             } catch (e: Exception) {
                 Log.e(TAG, "删除文件失败", e)
                 false
@@ -231,7 +183,6 @@ object SafFileManager {
         }
 }
 
-/** SAF 目录条目 */
 data class SafEntry(
     val name: String,
     val uri: Uri,
@@ -239,7 +190,6 @@ data class SafEntry(
     val documentId: String
 )
 
-/** Godot 项目信息 */
 data class GodotProjectInfo(
     val name: String,
     val uri: Uri,
