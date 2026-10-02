@@ -2,23 +2,17 @@ package com.godot.devassistant.util
 
 import android.content.Context
 import android.content.Intent
-import android.database.Cursor
 import android.net.Uri
-import android.provider.DocumentsContract
 import android.util.Log
+import androidx.documentfile.provider.DocumentFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.FileNotFoundException
 import java.io.IOException
 
 /**
  * SAF（Storage Access Framework）文件管理器
  *
- * 职责：
- * 1. 通过 ACTION_OPEN_DOCUMENT_TREE 获取目录访问权限
- * 2. 持久化保存目录授权（takePersistableUriPermission）
- * 3. 扫描目录树，查找 project.godot
- * 4. 读写 .gd 文件
+ * 使用 DocumentFile API（更可靠的子文档权限管理）
  */
 object SafFileManager {
 
@@ -73,65 +67,11 @@ object SafFileManager {
     }
 
     /**
-     * 获取树 URI 对应的文档 ID
+     * 将 tree URI 转换为 DocumentFile
      */
-    fun getTreeDocumentId(treeUri: Uri): String {
-        return DocumentsContract.getTreeDocumentId(treeUri)
+    fun treeToDocumentFile(context: Context, treeUri: Uri): DocumentFile? {
+        return DocumentFile.fromTreeUri(context, treeUri)
     }
-
-    /**
-     * 构建子文档的 Uri
-     */
-    fun buildChildUri(treeUri: Uri, parentDocId: String, childName: String): Uri {
-        val childDocId = "$parentDocId/$childName"
-        return DocumentsContract.buildDocumentUriUsingTree(treeUri, childDocId)
-    }
-
-    /**
-     * 列出目录下的所有子项（递归扫描）
-     *
-     * @param context 上下文
-     * @param dirUri 目录 Uri
-     * @return 子项列表（包含 name, uri, isDir）
-     */
-    suspend fun listDirectory(context: Context, dirUri: Uri): List<SafEntry> =
-        withContext(Dispatchers.IO) {
-            val entries = mutableListOf<SafEntry>()
-            val resolver = context.contentResolver
-
-            try {
-                val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(
-                    dirUri, DocumentsContract.getDocumentId(dirUri)
-                )
-
-                val projection = arrayOf(
-                    DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                    DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                    DocumentsContract.Document.COLUMN_MIME_TYPE
-                )
-
-                resolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
-                    val idCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
-                    val nameCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
-                    val mimeCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE)
-
-                    while (cursor.moveToNext()) {
-                        val docId = cursor.getString(idCol)
-                        val name = cursor.getString(nameCol) ?: "unnamed"
-                        val mime = cursor.getString(mimeCol) ?: ""
-
-                        val isDir = mime == DocumentsContract.Document.MIME_TYPE_DIR
-                        val uri = DocumentsContract.buildDocumentUriUsingTree(dirUri, docId)
-
-                        entries.add(SafEntry(name, uri, isDir, docId))
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "列出目录失败: ${dirUri}", e)
-            }
-
-            entries
-        }
 
     /**
      * 递归扫描整个目录树，查找所有 Godot 项目
@@ -145,114 +85,41 @@ object SafFileManager {
         maxDepth: Int = 8
     ): List<GodotProjectInfo> = withContext(Dispatchers.IO) {
         val projects = mutableListOf<GodotProjectInfo>()
-        scanRecursive(context, rootUri, 0, maxDepth, projects)
+        val rootDoc = DocumentFile.fromTreeUri(context, rootUri)
+        if (rootDoc != null) {
+            scanRecursive(context, rootDoc, 0, maxDepth, projects)
+        }
         projects
     }
 
     private fun scanRecursive(
         context: Context,
-        dirUri: Uri,
+        parentDoc: DocumentFile,
         depth: Int,
         maxDepth: Int,
         result: MutableList<GodotProjectInfo>
     ) {
         if (depth > maxDepth) return
 
-        // 列出当前目录
-        val entries = runCatching {
-            // 使用同步方式列出（已在 IO 线程）
-            listDirectorySync(context, dirUri)
-        }.getOrDefault(emptyList())
+        var subDirs = parentDoc.listFiles()
+        if (subDirs.isEmpty()) return
 
-        for (entry in entries) {
-            if (!entry.isDir) continue
+        for (entry in subDirs) {
+            if (!entry.isDirectory) continue
 
             // 检查子目录内是否有 project.godot
-            val hasProjectFile = runCatching {
-                findFileInDir(context, entry.uri, "project.godot")
-            }.getOrDefault(false)
-
-            if (hasProjectFile) {
+            val projectFile = entry.findFile("project.godot")
+            if (projectFile != null) {
                 result.add(GodotProjectInfo(
-                    name = entry.name,
+                    name = entry.name ?: "unknown",
                     uri = entry.uri,
-                    projectFileUri = findFileUri(context, entry.uri, "project.godot")
+                    projectFileUri = projectFile.uri
                 ))
             } else if (depth < maxDepth) {
-                // 递归扫描子目录（限定深度，避免过深扫描）
-                scanRecursive(context, entry.uri, depth + 1, maxDepth, result)
+                // 递归扫描子目录
+                scanRecursive(context, entry, depth + 1, maxDepth, result)
             }
         }
-    }
-
-    /** 同步版列出目录（供 IO 线程内部使用） */
-    private fun listDirectorySync(context: Context, dirUri: Uri): List<SafEntry> {
-        val entries = mutableListOf<SafEntry>()
-        val resolver = context.contentResolver
-
-        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(
-            dirUri, DocumentsContract.getDocumentId(dirUri)
-        )
-
-        val projection = arrayOf(
-            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-            DocumentsContract.Document.COLUMN_MIME_TYPE
-        )
-
-        resolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
-            val idCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
-            val nameCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
-            val mimeCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE)
-
-            while (cursor.moveToNext()) {
-                val docId = cursor.getString(idCol)
-                val name = cursor.getString(nameCol) ?: "unnamed"
-                val mime = cursor.getString(mimeCol) ?: ""
-                val isDir = mime == DocumentsContract.Document.MIME_TYPE_DIR
-                val uri = DocumentsContract.buildDocumentUriUsingTree(dirUri, docId)
-                entries.add(SafEntry(name, uri, isDir, docId))
-            }
-        }
-        return entries
-    }
-
-    /**
-     * 在指定目录中查找文件
-     * @return 是否找到
-     */
-    private fun findFileInDir(context: Context, dirUri: Uri, fileName: String): Boolean {
-        return findFileUri(context, dirUri, fileName) != null
-    }
-
-    /**
-     * 在指定目录中查找文件并返回其 Uri
-     */
-    private fun findFileUri(context: Context, dirUri: Uri, fileName: String): Uri? {
-        val resolver = context.contentResolver
-        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(
-            dirUri, DocumentsContract.getDocumentId(dirUri)
-        )
-
-        val projection = arrayOf(
-            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-            DocumentsContract.Document.COLUMN_MIME_TYPE
-        )
-
-        resolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
-            val idCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
-            val nameCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
-
-            while (cursor.moveToNext()) {
-                val name = cursor.getString(nameCol) ?: continue
-                if (name == fileName) {
-                    val docId = cursor.getString(idCol)
-                    return DocumentsContract.buildDocumentUriUsingTree(dirUri, docId)
-                }
-            }
-        }
-        return null
     }
 
     /**
@@ -276,17 +143,19 @@ object SafFileManager {
     ) {
         if (depth > maxDepth) return
 
-        val entries = runCatching {
-            listDirectorySync(context, dirUri)
-        }.getOrDefault(emptyList())
+        val doc = DocumentFile.fromTreeUri(context, dirUri) ?: return
+        var files = doc.listFiles()
+        if (files.isEmpty()) return
 
-        for (entry in entries) {
-            if (entry.isDir) {
-                // 跳过 .godot 缓存目录
-                if (entry.name.startsWith(".")) continue
-                collectScripts(context, entry.uri, result, depth + 1, maxDepth)
-            } else if (entry.name.endsWith(".gd")) {
-                result.add(entry)
+        for (entry in files) {
+            val name = entry.name ?: continue
+            if (entry.isDirectory) {
+                // 跳过 .godot 缓存目录和隐藏目录
+                if (!name.startsWith(".")) {
+                    collectScripts(context, entry.uri, result, depth + 1, maxDepth)
+                }
+            } else if (name.endsWith(".gd")) {
+                result.add(SafEntry(name, entry.uri, false, ""))
             }
         }
     }
@@ -299,7 +168,7 @@ object SafFileManager {
             try {
                 context.contentResolver.openInputStream(fileUri)?.use { stream ->
                     stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                } ?: throw FileNotFoundException("无法打开文件: $fileUri")
+                } ?: ""
             } catch (e: IOException) {
                 Log.e(TAG, "读取文件失败", e)
                 ""
@@ -333,17 +202,16 @@ object SafFileManager {
         mimeType: String = "text/plain"
     ): Uri? = withContext(Dispatchers.IO) {
         try {
-            val docId = DocumentsContract.getDocumentId(parentUri)
-            val newDocId = "$docId/$fileName"
-            val newUri = DocumentsContract.buildDocumentUriUsingTree(parentUri, newDocId)
-
-            // 使用 createDocument 创建
-            val created = DocumentsContract.createDocument(
-                context.contentResolver, parentUri, mimeType, fileName
-            )
-            created
+            val doc = DocumentFile.fromTreeUri(context, parentUri)
+            val created = doc?.createFile(mimeType, fileName)
+            if (created != null && created.exists()) {
+                created.uri
+            } else {
+                Log.w(TAG, "创建文件失败: $fileName")
+                null
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "创建文件失败", e)
+            Log.e(TAG, "创建文件异常", e)
             null
         }
     }
@@ -354,7 +222,8 @@ object SafFileManager {
     suspend fun deleteFile(context: Context, fileUri: Uri): Boolean =
         withContext(Dispatchers.IO) {
             try {
-                DocumentsContract.deleteDocument(context.contentResolver, fileUri)
+                val doc = DocumentFile.fromFileUri(context, fileUri)
+                doc?.delete() ?: false
             } catch (e: Exception) {
                 Log.e(TAG, "删除文件失败", e)
                 false

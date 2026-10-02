@@ -21,7 +21,6 @@ android {
 
         externalNativeBuild {
             cmake {
-                arguments "-DANDROID_STL=c++_shared"
                 arguments "-DANDROID_STL=c++_shared", "-DCMAKE_CXX_FLAGS=-Wl,-z,max-page-size=16384"
             }
         }
@@ -81,4 +80,5 @@ dependencies {
     implementation 'com.google.code.gson:gson:2.10.1'
     implementation 'io.noties.markwon:core:4.6.2'
     implementation 'io.noties.markwon:html:4.6.2'
+    implementation 'androidx.documentfile:documentfile:1.0.1'
 }
