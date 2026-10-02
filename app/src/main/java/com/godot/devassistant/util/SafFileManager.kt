@@ -142,7 +142,7 @@ object SafFileManager {
     suspend fun scanForGodotProjects(
         context: Context,
         rootUri: Uri,
-        maxDepth: Int = 4
+        maxDepth: Int = 8
     ): List<GodotProjectInfo> = withContext(Dispatchers.IO) {
         val projects = mutableListOf<GodotProjectInfo>()
         scanRecursive(context, rootUri, 0, maxDepth, projects)
