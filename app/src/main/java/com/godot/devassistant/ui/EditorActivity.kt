@@ -408,7 +408,7 @@ func _ready():
     }
 
     override fun onBackPressed() {
-        if (binding.editorView.isDirty) {
+        if (binding.editorView.isModified) {
             com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
                 .setTitle("未保存的更改")
                 .setMessage("当前文件有未保存的更改，是否保存？")

@@ -88,7 +88,7 @@ class GDScriptEditorView @JvmOverloads constructor(
     var onTextChangedListener: ((Boolean) -> Unit)? = null
 
     /** 当前是否已修改 */
-    var isDirty: Boolean = false
+    var isModified: Boolean = false
         private set
 
     // ============ 内部状态 ============
@@ -139,7 +139,7 @@ class GDScriptEditorView @JvmOverloads constructor(
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
 
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                isDirty = true
+                isModified = true
                 onTextChangedListener?.invoke(true)
                 scheduleHighlight()
                 scheduleCompletion()
@@ -540,7 +540,7 @@ class GDScriptEditorView @JvmOverloads constructor(
      * 重置修改标记
      */
     fun markClean() {
-        isDirty = false
+        isModified = false
         onTextChangedListener?.invoke(false)
     }
 
@@ -549,7 +549,7 @@ class GDScriptEditorView @JvmOverloads constructor(
      */
     fun setFileContent(content: String) {
         setText(content)
-        isDirty = false
+        isModified = false
         applyHighlighting()
     }
 
