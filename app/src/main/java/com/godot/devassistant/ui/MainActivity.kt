@@ -41,11 +41,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // 用 StartActivityForResult，这样 launch 可以传 Intent
     private val importDocLauncher = registerForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        if (uri != null) {
-            importDocument(uri)
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            result.data?.data?.let { uri ->
+                importDocument(uri)
+            }
         }
     }
 
@@ -179,19 +182,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun renderMarkdown(md: String): String {
         var html = md
-        // 代码块 (在转义后的基础上，把 <pre><code> 还原)
         html = html.replace(Regex("(?s)`{3}(\\w+)?\\n(.*?)`{3}"), "<pre><code>\\2</code></pre>")
-        // 行内代码
         html = html.replace(Regex("`([^`]+)`"), "<code>\\1</code>")
-        // 标题
         html = html.replace(Regex("(?m)^### (.*)$"), "<h3>\\1</h3>")
         html = html.replace(Regex("(?m)^## (.*)$"), "<h2>\\1</h2>")
         html = html.replace(Regex("(?m)^# (.*)$"), "<h1>\\1</h1>")
-        // 粗体
         html = html.replace(Regex("\\*\\*([^*]+)\\*\\*"), "<b>\\1</b>")
-        // 列表
         html = html.replace(Regex("(?m)^\\s*[-*] (.*)$"), "<li>\\1</li>")
-        // 段落分隔
         html = html.replace("\n\n", "</p><p>")
         return "<p>" + html + "</p>"
     }
