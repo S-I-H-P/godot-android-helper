@@ -1,10 +1,8 @@
 /**
 #include <sys/stat.h>
 #include <sstream>
-#include <regex>
 #include <sys/stat.h>
 #include <sstream>
-#include <regex>
  * @file project_scanner.cpp
  * @brief Godot 项目扫描器实现
  * @author Agnes Assistant
@@ -17,7 +15,6 @@
 #include "godot/file_utils.h"
 #include <functional>
 #include <algorithm>
-#include <regex>
 
 namespace godot {
 
@@ -95,15 +92,31 @@ std::unordered_map<std::string, std::string> ProjectScanner::parseProjectFile(
     std::unordered_map<std::string, std::string> result;
 
     // 简单的键值对解析（适用于 project.godot 的简化格式）
-    std::istringstream stream(content);
-    std::string line;
-    std::regex keyValRegex("^\\s*([^=\\s]+)\\s*=\\s*"([^"]*)"\\s*$");
+    // 查找 key = "value" 模式的行
+    size_t pos = 0;
+    while ((pos = content.find("=", pos)) != std::string::npos) {
+        // 获取等号前的键名（去掉空格）
+        int end = (int)pos - 1;
+        while (end > 0 && content[end] == ' ') end--;
+        int start = end;
+        while (start > 0 && content[start - 1] != '
+' && content[start - 1] != ' ' && content[start - 1] != '	') start--;
 
-    while (std::getline(stream, line)) {
-        std::smatch match;
-    std::regex keyValRegex("^\\s*([^=\\s]+)\\s*=\\s*"([^"]*)"\\s*$");
-            result[match[1]] = match[2];
+        // 获取等号后的值（找引号对）
+        int valStart = (int)pos + 1;
+        while (valStart < (int)content.size() && content[valStart] == ' ') valStart++;
+        if (valStart < (int)content.size() && content[valStart] == '"') {
+            int valEnd = valStart + 1;
+            while (valEnd < (int)content.size() && content[valEnd] != '"') valEnd++;
+            if (valEnd < (int)content.size()) {
+                std::string key = content.substr(start, end - start + 1);
+                std::string value = content.substr(valStart + 1, valEnd - valStart - 1);
+                result[key] = value;
+                pos = valEnd + 1;
+                continue;
+            }
         }
+        pos++;
     }
 
     return result;
