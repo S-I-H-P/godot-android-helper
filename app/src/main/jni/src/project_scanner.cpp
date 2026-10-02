@@ -97,11 +97,11 @@ std::unordered_map<std::string, std::string> ProjectScanner::parseProjectFile(
     // 简单的键值对解析（适用于 project.godot 的简化格式）
     std::istringstream stream(content);
     std::string line;
-    std::regex keyValRegex(R"(^\s*([^=\s]+)\s*=\s*"([^"]*)"\s*$)");
+    std::regex keyValRegex("^\\s*([^=\\s]+)\\s*=\\s*"([^"]*)"\\s*$");
 
     while (std::getline(stream, line)) {
         std::smatch match;
-        if (std::regex_match(line, match, keyValRegex)) {
+    std::regex keyValRegex("^\\s*([^=\\s]+)\\s*=\\s*"([^"]*)"\\s*$");
             result[match[1]] = match[2];
         }
     }
