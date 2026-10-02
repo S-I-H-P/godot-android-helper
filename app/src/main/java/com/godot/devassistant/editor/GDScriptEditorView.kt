@@ -148,11 +148,12 @@ class GDScriptEditorView @JvmOverloads constructor(
             override fun afterTextChanged(s: Editable?) {}
         })
 
-            invalidate()
-        }
 
         // 自定义菜单（复制/粘贴等）
         customSelectionActionModeCallback = object : ActionMode.Callback {
+            override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
+                menu.add(0, 1, 0, "复制")
+                menu.add(0, 2, 1, "粘贴")
                 menu.add(0, 3, 2, "剪切")
                 menu.add(0, 4, 3, "全选")
                 return true
