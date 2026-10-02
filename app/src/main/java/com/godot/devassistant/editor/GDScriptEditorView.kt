@@ -149,7 +149,6 @@ class GDScriptEditorView @JvmOverloads constructor(
         })
 
         // 光标位置变化监听
-        setOnSelectionChangedListener { selStart, selEnd ->
             invalidate()
         }
 
@@ -168,7 +167,7 @@ class GDScriptEditorView @JvmOverloads constructor(
             override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
                 return when (item.itemId) {
                     1 -> { // 复制
-                        val sel = selectedText?.toString() ?: return true
+                        val sel = text?.subSequence(selectionStart, selectionEnd)?.toString() ?: return true
                         (context as? android.content.ClipboardManager)?.setPrimaryClip(
                             android.content.ClipData.newPlainText("text", sel)
                         )
@@ -187,7 +186,7 @@ class GDScriptEditorView @JvmOverloads constructor(
                         true
                     }
                     3 -> { // 剪切
-                        val sel = selectedText?.toString() ?: return true
+                        val sel = text?.subSequence(selectionStart, selectionEnd)?.toString() ?: return true
                         (context as? android.content.ClipboardManager)?.setPrimaryClip(
                             android.content.ClipData.newPlainText("text", sel)
                         )
