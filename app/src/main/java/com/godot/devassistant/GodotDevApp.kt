@@ -3,22 +3,16 @@ package com.godot.devassistant
 import android.app.Application
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import com.godot.devassistant.native.NativeLib
 
-/**
- * 应用入口类
- * 负责初始化原生库与全局状态
- */
 class GodotDevApp : Application() {
 
     companion object {
         lateinit var instance: GodotDevApp
             private set
-
-        /** 应用设置 */
         lateinit var prefs: SharedPreferences
             private set
-
         const val PREF_NAME = "godot_dev_assistant_prefs"
     }
 
@@ -27,7 +21,15 @@ class GodotDevApp : Application() {
         instance = this
         prefs = getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
 
-        // 初始化原生库
-        NativeLib.init(this)
+        // 初始化原生库（加异常处理）
+        try {
+            NativeLib.init(this)
+            Log.d("GodotDevApp", "原生库加载成功")
+        } catch (e: UnsatisfiedLinkError) {
+            Log.e("GodotDevApp", "原生库加载失败: ${e.message}")
+            // 不影响应用启动
+        } catch (e: Exception) {
+            Log.e("GodotDevApp", "初始化异常: ${e.message}")
+        }
     }
 }
