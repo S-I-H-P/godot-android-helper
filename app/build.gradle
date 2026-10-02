@@ -14,19 +14,6 @@ android {
         targetSdk 34
         versionCode 1
         versionName "1.0.0"
-
-        // NDK 配置
-        ndk {
-            // 支持的主要架构
-            abiFilters += ['arm64-v8a', 'armeabi-v7a', 'x86_64']
-        }
-
-        externalNativeBuild {
-            cmake {
-                // CMake 参数
-                arguments "-DANDROID_STL=c++_shared"
-            }
-        }
     }
 
     buildTypes {
@@ -49,52 +36,30 @@ android {
         viewBinding true
     }
 
-    externalNativeBuild {
-        cmake {
-            path "src/main/jni/CMakeLists.txt"
-            version "3.22.1"
-        }
-    }
-
     sourceSets {
         main {
-            // 资源目录
             assets.srcDirs = ['src/main/assets']
-            jniLibs.srcDirs = ['src/main/jniLibs']
         }
     }
 }
 
 dependencies {
-    // Android 核心库
     implementation 'androidx.core:core-ktx:1.12.0'
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.11.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
     implementation 'androidx.activity:activity-ktx:1.8.2'
     implementation 'androidx.fragment:fragment-ktx:1.6.2'
-
-    // Kotlin 协程
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
-
-    // Navigation
     implementation "androidx.navigation:navigation-fragment-ktx:2.7.6"
     implementation "androidx.navigation:navigation-ui-ktx:2.7.6"
-
-    // ViewModel & LiveData
     implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0"
     implementation "androidx.lifecycle:lifecycle-livedata-ktx:2.7.0"
     implementation "androidx.lifecycle:lifecycle-runtime-ktx:2.7.0"
-
-    // Room 数据库（用于缓存项目信息）
     implementation "androidx.room:room-runtime:2.6.1"
     implementation "androidx.room:room-ktx:2.6.1"
     kapt "androidx.room:room-compiler:2.6.1"
-
-    // Gson（JSON 解析）
     implementation 'com.google.code.gson:gson:2.10.1'
-
-    // Markwon（Markdown 渲染，用于文档显示）
     implementation 'io.noties.markwon:core:4.6.2'
     implementation 'io.noties.markwon:html:4.6.2'
 }
