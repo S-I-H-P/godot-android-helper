@@ -30,15 +30,11 @@ jobs:
           sdkmanager --install "ndk;27.0.12077973" "cmake;3.22.1"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973" >> $GITHUB_ENV
 
-      - name: Restore keystore
+      # A 方案：keystore 直接来自仓库（checkout 就有），不再还原 base64。
+      # 只把仓库里的 jks 设给 build.gradle 读，密码仍从 Secrets 注入。
+      - name: Point signing at repo keystore
         run: |
-          mkdir -p signing
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > signing/godot-assistant.jks
-          chmod 600 signing/godot-assistant.jks
           echo "KEYSTORE_PATH=$PWD/signing/godot-assistant.jks" >> $GITHUB_ENV
-
-      - name: Set signing vars
-        run: |
           echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
           echo "STORE_PASSWORD=${{ secrets.STORE_PASSWORD }}" >> $GITHUB_ENV
           echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> $GITHUB_ENV
