@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 深色模式下的颜色覆盖 -->
+<resources>
+    <!-- 文本颜色：深色背景上必须用浅色文字 -->
+    <color name="text_primary">#E8EAF0</color>
+    <color name="text_secondary">#A6ADC8</color>
+    <color name="text_hint">#7F849C</color>
+
+    <!-- 背景 -->
+    <color name="bg_light">#1A1A2E</color>
+    <color name="surface_light">#252535</color>
+
+    <!-- 卡片 / Chip -->
+    <color name="chip_bg">#33FFFFFF</color>
+</resources>

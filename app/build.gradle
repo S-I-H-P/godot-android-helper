@@ -8,6 +8,9 @@ android {
     namespace 'com.godot.devassistant'
     compileSdk 34
 
+    // NDK 27+ 的 libc++_shared.so 才是 16KB 页面对齐的
+    ndkVersion "27.0.12077973"
+
     defaultConfig {
         applicationId "com.godot.devassistant"
         minSdk 26
@@ -21,7 +24,9 @@ android {
 
         externalNativeBuild {
             cmake {
-                arguments "-DANDROID_STL=c++_shared", "-DCMAKE_CXX_FLAGS=-Wl,-z,max-page-size=16384"
+                // 链接参数（max-page-size）在 CMakeLists.txt 里用
+                // target_link_options 设置，这里不要塞 CXX_FLAGS
+                arguments "-DANDROID_STL=c++_shared"
             }
         }
     }
@@ -50,6 +55,13 @@ android {
         cmake {
             path "src/main/jni/CMakeLists.txt"
             version "3.22.1"
+        }
+    }
+
+    packaging {
+        jniLibs {
+            // .so 不压缩，由 AGP 做 16KB 对齐的 zipalign
+            useLegacyPackaging = false
         }
     }
 

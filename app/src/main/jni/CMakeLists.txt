@@ -1,6 +1,5 @@
 # Godot 开发助手 - CMake 构建配置
 # 构建原生库：godot-dev-assistant
-# 作者: Agnes Assistant
 
 cmake_minimum_required(VERSION 3.22.1)
 project(godot_dev_assistant)
@@ -41,6 +40,15 @@ set(SOURCES
 add_library(godot-dev-assistant SHARED ${SOURCES})
 
 # =====================
+# 16KB 页面对齐（Android 15+ 要求）
+# =====================
+# 只作用于链接阶段，不影响编译 flags
+target_link_options(godot-dev-assistant PRIVATE
+    "-Wl,-z,max-page-size=16384"
+    "-Wl,-z,common-page-size=16384"
+)
+
+# =====================
 # 链接库
 # =====================
 # Android 系统库
@@ -50,9 +58,6 @@ find_library(android-lib android)
 target_link_libraries(godot-dev-assistant
     ${log-lib}
     ${android-lib}
-    # 如需加密功能可链接 OpenSSL
-    # OpenSSL::SSL
-    # OpenSSL::Crypto
 )
 
 # =====================
