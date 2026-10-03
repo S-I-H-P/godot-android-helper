@@ -5,7 +5,6 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.text.Editable
 import android.text.InputType
-import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.TextWatcher
 import android.text.style.ForegroundColorSpan
@@ -21,8 +20,11 @@ import kotlin.math.max
 /**
  * GDScript 代码编辑器视图
  *
- * 注意：所有原生库调用都用 Throwable 捕获，
- * 因为 UnsatisfiedLinkError 属于 Error 而非 Exception。
+ * 关键点：
+ * 1. 语法高亮直接修改 Editable 的 span，**不调用 setText**，
+ *    否则光标会被重置到开头。
+ * 2. 所有原生库调用都用 Throwable 捕获
+ *    （UnsatisfiedLinkError 属于 Error 而非 Exception）。
  */
 class GDScriptEditorView @JvmOverloads constructor(
     context: Context,
@@ -143,9 +145,14 @@ class GDScriptEditorView @JvmOverloads constructor(
         postDelayed(highlightTask, 200)
     }
 
-    /** 应用语法高亮 */
+    /**
+     * 应用语法高亮
+     *
+     * 直接在 Editable 上增删 span，不重建文本，因此光标位置保持不变。
+     */
     fun applyHighlighting() {
-        val source = text.toString()
+        val editable: Editable = text ?: return
+        val source = editable.toString()
         if (source.isEmpty()) return
 
         try {
@@ -155,12 +162,12 @@ class GDScriptEditorView @JvmOverloads constructor(
                 object : TypeToken<List<HighlightRange>>() {}.type
             ) ?: return
 
-            val spannable = SpannableStringBuilder(source)
-
-            for (span in spannable.getSpans(0, spannable.length, ForegroundColorSpan::class.java)) {
-                spannable.removeSpan(span)
+            // 清除旧的着色 span（只清 ForegroundColorSpan，不影响其它 span）
+            for (span in editable.getSpans(0, editable.length, ForegroundColorSpan::class.java)) {
+                editable.removeSpan(span)
             }
 
+            // 应用新着色
             for (range in ranges) {
                 val start = range.start.coerceIn(0, source.length)
                 val end = range.end.coerceIn(start, source.length)
@@ -177,12 +184,11 @@ class GDScriptEditorView @JvmOverloads constructor(
                     10 -> COLOR_NUMBER
                     else -> COLOR_TEXT
                 }
-                spannable.setSpan(
+                editable.setSpan(
                     ForegroundColorSpan(color), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
                 )
             }
-
-            setText(spannable, BufferType.SPANNABLE)
+            // 不调用 setText，光标与滚动位置都不会变化
         } catch (e: Throwable) {
             // 高亮失败（含原生库缺失）时保留原文
         }
@@ -274,8 +280,9 @@ class GDScriptEditorView @JvmOverloads constructor(
             if (nextLine == -1) break
             pos = nextLine + 1
         }
+        val cursor = selectionStart
         setText(sb)
-        setSelection(start + 4, end + 4)
+        setSelection(cursor + 4)
     }
 
     fun outdentSelection() {
@@ -295,8 +302,9 @@ class GDScriptEditorView @JvmOverloads constructor(
             if (nextLine == -1) break
             pos = nextLine + 1
         }
+        val cursor = selectionStart
         setText(sb)
-        setSelection(max(0, start - 4), max(0, end - 4))
+        setSelection(max(0, cursor - 4))
     }
 
     fun toggleComment() {
@@ -309,13 +317,17 @@ class GDScriptEditorView @JvmOverloads constructor(
         val line = source.substring(lineStart, lineEnd)
 
         val sb = StringBuilder(source)
+        val delta: Int
         if (line.startsWith("#")) {
             sb.delete(lineStart, lineStart + 1)
+            delta = -1
         } else {
             sb.insert(lineStart, "#")
+            delta = 1
         }
+        val cursor = selectionStart
         setText(sb)
-        setSelection(lineStart + 1, lineEnd + 1)
+        setSelection(max(0, cursor + delta))
     }
 
     fun gotoLine(lineNumber: Int) {
@@ -347,9 +359,12 @@ class GDScriptEditorView @JvmOverloads constructor(
         onTextChangedListener?.invoke(false)
     }
 
+    /** 设置文件内容（仅用于首次打开文件） */
     fun setFileContent(content: String) {
         setText(content)
         isModified = false
+        // 光标放到开头
+        setSelection(0)
         applyHighlighting()
     }
 

@@ -1,165 +1,216 @@
 package com.godot.devassistant.editor
 
 import android.content.Context
+import android.graphics.Color
 import android.util.AttributeSet
-import android.view.LayoutInflater
-import android.view.View
+import android.util.TypedValue
+import android.view.Gravity
 import android.view.ViewGroup
-import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
-import com.google.android.material.button.MaterialButton
-import com.godot.devassistant.R
 
 /**
- * 编辑器键盘上方工具栏
+ * 编辑器键盘工具栏（Termux 风格 + M3E 视觉）
  *
- * 类似安卓版 Godot 编辑器的快捷按键栏，
- * 在输入法上方显示常用按键：Tab, Shift, 方向键, 括号, 引号等。
+ * 特点：
+ * - 三行固定键盘，不需要滑动，所有按键一屏可见
+ * - 等宽分布（每行按键平均分配宽度）
+ * - M3E 风格：圆角胶囊按键、色调表面、按压涟漪
+ * - CTRL / ALT 为粘滞修饰键：按下后下一个字符会转成控制字符 / ESC+字符
  */
 class EditorKeyboardBar @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null
 ) : LinearLayout(context, attrs) {
 
-    /** 按键点击回调 */
+    /** 按键回调（KeyType 与 EditorActivity 中的处理保持一致） */
     var onKeyPressed: (KeyType, String) -> Unit = { _, _ -> }
 
-    /** Shift 状态 */
-    private var shiftOn = false
+    private var ctrlOn = false
+    private var altOn = false
 
-    /** 定义所有按键 */
-    private val keys = listOf(
-        KeyDef("Tab", KeyType.TAB, "\t"),
-        KeyDef("⇧", KeyType.SHIFT, ""),
-        KeyDef("←", KeyType.ARROW_LEFT, ""),
-        KeyDef("→", KeyType.ARROW_RIGHT, ""),
-        KeyDef("↑", KeyType.ARROW_UP, ""),
-        KeyDef("↓", KeyType.ARROW_DOWN, ""),
-        KeyDef("{", KeyType.TEXT, "{"),
-        KeyDef("}", KeyType.TEXT, "}"),
-        KeyDef("(", KeyType.TEXT, "("),
-        KeyDef(")", KeyType.TEXT, ")"),
-        KeyDef("[", KeyType.TEXT, "["),
-        KeyDef("]", KeyType.TEXT, "]"),
-        KeyDef("\"", KeyType.TEXT, "\""),
-        KeyDef("'", KeyType.TEXT, "'"),
-        KeyDef(":", KeyType.TEXT, ":"),
-        KeyDef(".", KeyType.TEXT, "."),
-        KeyDef(",", KeyType.TEXT, ","),
-        KeyDef("=", KeyType.TEXT, "="),
-        KeyDef("!", KeyType.TEXT, "!"),
-        KeyDef("<", KeyType.TEXT, "<"),
-        KeyDef(">", KeyType.TEXT, ">"),
-        KeyDef("&", KeyType.TEXT, "&"),
-        KeyDef("|", KeyType.TEXT, "|"),
-        KeyDef("+", KeyType.TEXT, "+"),
-        KeyDef("-", KeyType.TEXT, "-"),
-        KeyDef("*", KeyType.TEXT, "*"),
-        KeyDef("/", KeyType.TEXT, "/"),
-        KeyDef("%", KeyType.TEXT, "%"),
-        KeyDef("#", KeyType.TEXT, "#"),
-        KeyDef("@", KeyType.TEXT, "@"),
-        KeyDef("$", KeyType.TEXT, "$"),
-        KeyDef("_", KeyType.TEXT, "_"),
-        KeyDef("\\n", KeyType.NEWLINE, "\n"),
-        KeyDef("Del", KeyType.DELETE, ""),
-        KeyDef("←Del", KeyType.BACKSPACE, "")
-    )
+    private var ctrlKey: TextView? = null
+    private var altKey: TextView? = null
 
-    init {
-        orientation = HORIZONTAL
-        setupViews()
-    }
+    // 颜色
+    private val colorKeyBg = 0xFF2A2A3E.toInt()
+    private val colorSpecialBg = 0xFF3D3D55.toInt()
+    private val colorAccentBg = 0xFF4A90D9.toInt()
+    private val colorText = 0xFFCDD6F4.toInt()
+    private val colorTextDim = 0xFF9CA3AF.toInt()
 
-    private fun setupViews() {
-        // 使用 HorizontalScrollView 包裹，支持滑动查看更多按键
-        val scrollView = HorizontalScrollView(context).apply {
-            isHorizontalScrollBarEnabled = false
-            layoutParams = LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-        }
-
-        val row = LinearLayout(context).apply {
-            orientation = HORIZONTAL
-            layoutParams = LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-        }
-
-        for (keyDef in keys) {
-            val button = MaterialButton(context).apply {
-                text = keyDef.label
-                textSize = 14f
-                minHeight = 0
-                minimumHeight = 0
-                setPadding(12, 8, 12, 8)
-                layoutParams = LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                ).apply {
-                    marginEnd = 4
-                }
-                setOnClickListener {
-                    handleKeyPress(keyDef)
-                }
-                // Shift 键特殊样式
-                if (keyDef.type == KeyType.SHIFT) {
-                    id = R.id.editor_btn_shift
-                }
-            }
-            row.addView(button)
-        }
-
-        scrollView.addView(row)
-        addView(scrollView)
-    }
-
-    /**
-     * 处理按键点击
-     */
-    private fun handleKeyPress(keyDef: KeyDef) {
-        when (keyDef.type) {
-            KeyType.SHIFT -> {
-                shiftOn = !shiftOn
-                // 更新 Shift 按钮样式
-                findViewById<MaterialButton>(R.id.editor_btn_shift)?.let { btn ->
-                    btn.isChecked = shiftOn
-                }
-                onKeyPressed(KeyType.SHIFT, "")
-            }
-            KeyType.TAB -> onKeyPressed(KeyType.TAB, "\t")
-            KeyType.NEWLINE -> onKeyPressed(KeyType.NEWLINE, "\n")
-            KeyType.BACKSPACE -> onKeyPressed(KeyType.BACKSPACE, "")
-            KeyType.DELETE -> onKeyPressed(KeyType.DELETE, "")
-            KeyType.ARROW_LEFT -> onKeyPressed(KeyType.ARROW_LEFT, "")
-            KeyType.ARROW_RIGHT -> onKeyPressed(KeyType.ARROW_RIGHT, "")
-            KeyType.ARROW_UP -> onKeyPressed(KeyType.ARROW_UP, "")
-            KeyType.ARROW_DOWN -> onKeyPressed(KeyType.ARROW_DOWN, "")
-            KeyType.TEXT -> {
-                val text = if (shiftOn) keyDef.text.uppercase() else keyDef.text
-                onKeyPressed(KeyType.TEXT, text)
-                if (shiftOn) {
-                    shiftOn = false
-                    findViewById<MaterialButton>(R.id.editor_btn_shift)?.isChecked = false
-                }
-            }
-        }
-    }
-
-    /** 按键类型 */
-    enum class KeyType {
-        TAB, SHIFT, TEXT, NEWLINE, BACKSPACE, DELETE,
-        ARROW_LEFT, ARROW_RIGHT, ARROW_UP, ARROW_DOWN
-    }
-
-    /** 按键定义 */
+    /** 按键定义：标签 -> 类型 */
     private data class KeyDef(
         val label: String,
         val type: KeyType,
-        val text: String
+        val text: String = "",
+        val special: Boolean = false,
+        val flexible: Float = 1f
     )
+
+    private val rows: List<List<KeyDef>> = listOf(
+        // 第一行：控制键
+        listOf(
+            KeyDef("ESC", KeyType.TEXT, "\u001b", special = true),
+            KeyDef("TAB", KeyType.TAB, "\t", special = true),
+            KeyDef("CTRL", KeyType.CTRL, special = true),
+            KeyDef("ALT", KeyType.ALT, special = true),
+            KeyDef("⌫", KeyType.BACKSPACE, special = true),
+            KeyDef("DEL", KeyType.DELETE, special = true),
+            KeyDef("←", KeyType.ARROW_LEFT, special = true),
+            KeyDef("↑", KeyType.ARROW_UP, special = true),
+            KeyDef("↓", KeyType.ARROW_DOWN, special = true),
+            KeyDef("→", KeyType.ARROW_RIGHT, special = true)
+        ),
+        // 第二行：运算符与括号
+        listOf(
+            KeyDef("-", KeyType.TEXT, "-"),
+            KeyDef("_", KeyType.TEXT, "_"),
+            KeyDef("=", KeyType.TEXT, "="),
+            KeyDef("+", KeyType.TEXT, "+"),
+            KeyDef("{", KeyType.TEXT, "{"),
+            KeyDef("}", KeyType.TEXT, "}"),
+            KeyDef("[", KeyType.TEXT, "["),
+            KeyDef("]", KeyType.TEXT, "]"),
+            KeyDef("(", KeyType.TEXT, "("),
+            KeyDef(")", KeyType.TEXT, ")"),
+            KeyDef("/", KeyType.TEXT, "/"),
+            KeyDef("\\", KeyType.TEXT, "\\")
+        ),
+        // 第三行：标点与其它
+        listOf(
+            KeyDef(";", KeyType.TEXT, ";"),
+            KeyDef(":", KeyType.TEXT, ":"),
+            KeyDef("\"", KeyType.TEXT, "\""),
+            KeyDef("'", KeyType.TEXT, "'"),
+            KeyDef(",", KeyType.TEXT, ","),
+            KeyDef(".", KeyType.TEXT, "."),
+            KeyDef("<", KeyType.TEXT, "<"),
+            KeyDef(">", KeyType.TEXT, ">"),
+            KeyDef("!", KeyType.TEXT, "!"),
+            KeyDef("?", KeyType.TEXT, "?"),
+            KeyDef("|", KeyType.TEXT, "|"),
+            KeyDef("~", KeyType.TEXT, "~")
+        )
+    )
+
+    init {
+        orientation = VERTICAL
+        setBackgroundColor(0xFF1A1A2E.toInt())
+        val pad = dp(2)
+        setPadding(pad, pad, pad, pad)
+        buildKeys()
+    }
+
+    private fun buildKeys() {
+        for (row in rows) {
+            val rowLayout = LinearLayout(context).apply {
+                orientation = HORIZONTAL
+                layoutParams = LayoutParams(
+                    LayoutParams.MATCH_PARENT,
+                    0,
+                    1f
+                )
+            }
+            for (key in row) {
+                rowLayout.addView(createKeyView(key))
+            }
+            addView(rowLayout)
+        }
+    }
+
+    private fun createKeyView(key: KeyDef): TextView {
+        val tv = TextView(context).apply {
+            text = key.label
+            gravity = Gravity.CENTER
+            setTextColor(if (key.special) colorText else colorText)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            setBackgroundResource(
+                if (key.special) com.godot.devassistant.R.drawable.bg_key_special
+                else com.godot.devassistant.R.drawable.bg_key
+            )
+            isClickable = true
+            isFocusable = true
+            layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, key.flexible).apply {
+                val m = dp(2)
+                setMargins(m, m, m, m)
+            }
+            setOnClickListener { handleKey(key) }
+        }
+
+        when (key.type) {
+            KeyType.CTRL -> ctrlKey = tv
+            KeyType.ALT -> altKey = tv
+            else -> {}
+        }
+
+        return tv
+    }
+
+    private fun handleKey(key: KeyDef) {
+        when (key.type) {
+            KeyType.CTRL -> {
+                ctrlOn = !ctrlOn
+                if (ctrlOn) altOn = false
+                refreshModifierState()
+                return
+            }
+            KeyType.ALT -> {
+                altOn = !altOn
+                if (altOn) ctrlOn = false
+                refreshModifierState()
+                return
+            }
+            else -> {}
+        }
+
+        var outText = key.text
+        var outType = key.type
+
+        // 修饰键转换（仅对普通文本键生效）
+        if (key.type == KeyType.TEXT && key.text.isNotEmpty()) {
+            val ch = key.text[0]
+            if (ctrlOn) {
+                // Ctrl+A..Z -> 0x01..0x1A
+                val upper = ch.uppercaseChar()
+                if (upper in 'A'..'Z') {
+                    outText = ((upper.code - 'A'.code + 1).toChar()).toString()
+                } else if (ch == '[') {
+                    outText = "\u001b"
+                } else if (ch == '\\') {
+                    outText = "\u001c"
+                } else if (ch == ']') {
+                    outText = "\u001d"
+                }
+                ctrlOn = false
+            } else if (altOn) {
+                outText = "\u001b$ch"
+                altOn = false
+            }
+            refreshModifierState()
+        }
+
+        onKeyPressed(outType, outText)
+    }
+
+    private fun refreshModifierState() {
+        ctrlKey?.let {
+            it.setBackgroundColor(if (ctrlOn) colorAccentBg else colorSpecialBg)
+            it.setTextColor(if (ctrlOn) Color.WHITE else colorTextDim)
+        }
+        altKey?.let {
+            it.setBackgroundColor(if (altOn) colorAccentBg else colorSpecialBg)
+            it.setTextColor(if (altOn) Color.WHITE else colorTextDim)
+        }
+    }
+
+    private fun dp(value: Int): Int =
+        (value * resources.displayMetrics.density).toInt()
+
+    /** 按键类型（与 EditorActivity 的处理保持一致） */
+    enum class KeyType {
+        TAB, SHIFT, TEXT, NEWLINE, BACKSPACE, DELETE,
+        ARROW_LEFT, ARROW_RIGHT, ARROW_UP, ARROW_DOWN,
+        CTRL, ALT
+    }
 }

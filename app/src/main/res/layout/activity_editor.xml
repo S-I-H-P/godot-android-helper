@@ -37,11 +37,11 @@
         android:textSize="14sp"
         android:padding="8dp" />
 
-    <!-- 键盘工具栏 -->
+    <!-- 键盘工具栏（三行固定布局，无需滑动） -->
     <com.godot.devassistant.editor.EditorKeyboardBar
         android:id="@+id/keyboard_bar"
         android:layout_width="match_parent"
-        android:layout_height="44dp"
+        android:layout_height="126dp"
         android:background="@color/keyboard_bar_bg" />
 
 </LinearLayout>
