@@ -216,42 +216,6 @@ std::vector<CompletionItem> CompletionEngine::getCompletions(
     const std::vector<Token>& tokens,
     const std::string& partialInput) {
     std::vector<CompletionItem> result;
-
-    // 注意：partialInput 为空时不再直接返回空。
-    // 光标在行首 / 缩进 / 空白处时没有前缀词，此时应给出全部候选，
-    // 否则用户点「补全」会毫无反应。
-
-    // 最后两个 token（用于判断上下文）
-    std::string lastToken;
-    std::string secondLastToken;
-    if (!tokens.empty()) {
-        lastToken = tokens.back().lexeme;
-    }
-    if (tokens.size() >= 2) {
-        secondLastToken = tokens[tokens.size() - 2].lexeme;
-    }
-
-    // ---- 上下文 1：点号后的成员补全 ----
-    if (lastToken == "." && !secondLastToken.empty()) {
-        if (s_classMethods.count(secondLastToken)) {
-            for (const auto& method : s_classMethods[secondLastToken]) {
-                if (!partialInput.empty() &&
-                    method.find(partialInput) == std::string::npos) {
-                    continue;
-                }
-                CompletionItem item;
-                item.text = method;
-                item.label = method;
-                item.kind = "method";
-                result.push_back(item);
-            }
-            // 成员补全只返回方法，不混入关键字
-            if (result.size() > kMaxResults) result.resize(kMaxResults);
-            return result;
-        }
-    }
-
-    // ---- 上下文 2：通用补全（关键字 + 类型 + 回调）----
     std::set<std::string> seen;
 
     auto filterItems = [&](const std::vector<CompletionItem>& items) {
@@ -267,10 +231,41 @@ std::vector<CompletionItem> CompletionEngine::getCompletions(
         }
     };
 
+    // ---- 上下文 1：点号后的成员补全 ----
+    std::string lastToken;
+    std::string secondLastToken;
+    if (!tokens.empty()) {
+        lastToken = tokens.back().lexeme;
+        if (tokens.size() >= 2) secondLastToken = tokens[tokens.size() - 2].lexeme;
+    }
+    if (lastToken == "." && !secondLastToken.empty()) {
+        if (s_classMethods.count(secondLastToken)) {
+            for (const auto& method : s_classMethods[secondLastToken]) {
+                if (result.size() >= kMaxResults) break;
+                if (!partialInput.empty() &&
+                    method.find(partialInput) == std::string::npos) {
+                    continue;
+                }
+                CompletionItem item;
+                item.text = method;
+                item.label = method;
+                item.kind = "method";
+                seen.insert(method);
+                result.push_back(item);
+            }
+            std::sort(result.begin(), result.end(),
+                [](const CompletionItem& a, const CompletionItem& b) {
+                    return a.label < b.label;
+                });
+            return result;
+        }
+    }
+
+    // ---- 上下文 2：通用补全（不依赖 token 流）----
+    // partialInput 为空时也返回全部候选，光标在任意位置都能有响应
     filterItems(getKeywordCompletions());
     filterItems(getTypeCompletions());
 
-    // 生命周期回调：始终提供（用 _ 开头时尤其有用）
     {
         for (const auto& cb : s_callbacks) {
             if (result.size() >= kMaxResults) break;
@@ -280,7 +275,6 @@ std::vector<CompletionItem> CompletionEngine::getCompletions(
             }
             if (seen.count(cb)) continue;
             seen.insert(cb);
-
             CompletionItem item;
             item.text = cb + "()";
             item.label = cb;
@@ -290,7 +284,6 @@ std::vector<CompletionItem> CompletionEngine::getCompletions(
         }
     }
 
-    // 去重并排序（短标签优先，便于阅读）
     std::sort(result.begin(), result.end(),
         [](const CompletionItem& a, const CompletionItem& b) {
             if (a.label.size() != b.label.size()) {

@@ -195,19 +195,52 @@ class EditorActivity : AppCompatActivity() {
 
     private fun showCreateScriptDialog() {
         val input = android.widget.EditText(this).apply {
-            hint = "脚本名.gd"
+            hint = "脚本名（.gd 会自动补全）"
         }
         com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
             .setTitle("新建脚本")
             .setView(input)
             .setPositiveButton("创建") { _, _ ->
-                val name = input.text.toString()
-                if (name.isNotBlank()) {
-                    createNewScript(name)
+                val rawName = input.text.toString()
+                val normalized = normalizeScriptName(rawName)
+                if (normalized != rawName) {
+                    // 用户没写扩展名或写错，自动纠正
+                    Snackbar.make(
+                        binding.root,
+                        "已创建为 $normalized",
+                        Snackbar.LENGTH_SHORT
+                    ).show()
+                }
+                if (normalized.isNotEmpty()) {
+                    createNewScript(normalized)
                 }
             }
             .setNegativeButton("取消", null)
             .show()
+    }
+
+    /**
+     * 强制归一化脚本名：保证扩展名一定是 .gd。
+     *
+     * - 空 / 纯空白 → "script.gd"
+     * - 无扩展名（"player"） → "player.gd"
+     * - 已是 .gd（"player.gd"） → 原样
+     * - 其它扩展名（"player.txt" / "player.cpp"） → "player.gd"
+     * - 含路径分隔符（"a/b"） → "a/b.gd"（SAF 支持嵌套）
+     */
+    private fun normalizeScriptName(raw: String): String {
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty()) return "script.gd"
+
+        // 取最后一段路径，处理 "dir/player" 这种输入
+        val lastSlash = trimmed.lastIndexOf('/')
+        val dirPart = if (lastSlash >= 0) trimmed.substring(0, lastSlash + 1) else ""
+        val basePart = if (lastSlash >= 0) trimmed.substring(lastSlash + 1) else trimmed
+
+        val dotIdx = basePart.lastIndexOf('.')
+        val stem = if (dotIdx > 0) basePart.substring(0, dotIdx) else basePart
+        if (stem.isEmpty()) return "script.gd"
+        return dirPart + stem + ".gd"
     }
 
     private fun createNewScript(fileName: String) {
@@ -226,9 +259,10 @@ class EditorActivity : AppCompatActivity() {
     }
 
     private fun buildScriptTemplate(fileName: String): String {
-        val className = fileName.removeSuffix(".gd").replaceFirstChar { it.uppercase() }
+        val baseName = fileName.substringAfterLast('/')
+        val className = baseName.removeSuffix(".gd").replaceFirstChar { it.uppercase() }
         return """extends Node
-# $className.gd
+# $baseName
 # 创建时间: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.CHINESE).format(java.util.Date())}
 
 # 成员变量
