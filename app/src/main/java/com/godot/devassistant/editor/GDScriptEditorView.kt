@@ -30,6 +30,7 @@ import kotlin.math.max
  * 1. 语法高亮直接修改 Editable 的 span，不调用 setText（否则光标被重置）
  * 2. 所有原生库调用都放到 IO 线程，绝不阻塞主线程（否则 ANR）
  * 3. 代码补全为【手动触发】——由键盘栏的「补全」按键调用 requestCompletionsNow()
+ *    光标在任意位置（行首 / 空白 / 已有词尾）都能出候选，不再因前缀为空而静默返回。
  * 4. 传给原生的文本做长度截断，避免大文件 tokenize 卡死
  */
 class GDScriptEditorView @JvmOverloads constructor(
@@ -230,9 +231,14 @@ class GDScriptEditorView @JvmOverloads constructor(
     // ==================== 代码补全（手动触发） ====================
 
     /**
-     * 手动请求一次代码补全（由键盘栏「补全」按键调用）
+     * 手动请求一次代码补全（由键盘栏「补全」按键调用）。
      *
-     * 计算在 IO 线程，绝不阻塞主线程。
+     * 关键改动：
+     * - 不再因前缀为空 / 光标在行首而 early return。C++ 端 partialInput 为空时
+     *   会返回全部候选（关键词 + 类型 + 生命周期回调），光标在任意位置都能出候选。
+     * - 发给 C++ 的输入是「光标前的原文」（截断到 MAX_NATIVE_CHARS），
+     *   C++ 自己判 partialInput 和上下文（点号后成员补全等）。
+     * - 计算在 IO 线程，绝不阻塞主线程。
      */
     fun requestCompletionsNow() {
         if (!autoCompleteEnabled) return
@@ -241,16 +247,16 @@ class GDScriptEditorView @JvmOverloads constructor(
         val source = text?.toString() ?: return
         if (cursor < 0 || cursor > source.length) return
 
-        val prefix = source.substring(0, cursor)
-        if (prefix.isEmpty() || prefix.endsWith("\n")) return
-
-        val currentWord = extractCurrentWord(source, cursor)
-
-        // 只把光标前最近的一段发给原生，避免大文件 tokenize 卡死
-        val nativeInput = if (prefix.length > MAX_NATIVE_CHARS) {
-            prefix.substring(prefix.length - MAX_NATIVE_CHARS)
+        // 光标前的原文（给 C++ 做 token 流和 partialInput 判定）
+        val nativeInput = if (source.length > cursor) {
+            val prefix = source.substring(0, cursor)
+            if (prefix.length > MAX_NATIVE_CHARS) {
+                prefix.substring(prefix.length - MAX_NATIVE_CHARS)
+            } else {
+                prefix
+            }
         } else {
-            prefix
+            ""
         }
 
         val myVersion = ++completionVersion
@@ -275,12 +281,8 @@ class GDScriptEditorView @JvmOverloads constructor(
                 // 光标已移动则丢弃
                 if (selectionStart != cursor) return@launch
 
-                if (items.isNotEmpty()) {
-                    onCompletionRequest(items)
-                } else if (currentWord.isNotEmpty()) {
-                    // 没有补全项时给个提示，让用户知道按键生效了
-                    onCompletionRequest(emptyList())
-                }
+                // 总是回调（即使空，让 Activity 决定要不要提示）
+                onCompletionRequest(items)
             } catch (e: Throwable) {
                 Log.e(TAG, "补全解析失败", e)
             }
@@ -424,7 +426,9 @@ class GDScriptEditorView @JvmOverloads constructor(
     fun setFileContent(content: String) {
         setText(content)
         isModified = false
-        setSelection(0)
+        // 光标停在文件末尾（而不是 0），这样用户一打开文件，
+        // 光标前就有完整内容，键盘栏「补全」按键可以立即工作
+        setSelection(content.length)
         applyHighlighting()
     }
 

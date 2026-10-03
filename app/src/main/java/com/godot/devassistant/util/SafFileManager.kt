@@ -150,11 +150,21 @@ object SafFileManager {
             }
         }
 
+    /**
+     * 创建新文件。
+     *
+     * 关键：mimeType 默认用 "application/octet-stream" 而不是 "text/plain"。
+     * 在 Android MTP provider（外部存储 / 下载目录 / 应用沙盒）上，
+     * text/plain 类型会被 provider 自动追加 ".txt"，导致
+     * "player.gd" 实际创建成 "player.gd.txt"，
+     * 而 collectScripts 只挑 endsWith(".gd")，脚本就永远进不了列表。
+     * octet-stream 不会触发 MTP 的 mime→ext 补全，扩展名原样保留。
+     */
     suspend fun createFile(
         context: Context,
         parentUri: Uri,
         fileName: String,
-        mimeType: String = "text/plain"
+        mimeType: String = "application/octet-stream"
     ): Uri? = withContext(Dispatchers.IO) {
         try {
             val doc = DocumentFile.fromTreeUri(context, parentUri)
