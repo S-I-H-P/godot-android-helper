@@ -86,6 +86,10 @@ class EditorActivity : AppCompatActivity() {
     private fun setupKeyboardBar() {
         binding.keyboardBar.onKeyPressed = { type, text ->
             when (type) {
+                EditorKeyboardBar.KeyType.COMPLETE -> {
+                    // 手动触发代码补全
+                    binding.editorView.requestCompletionsNow()
+                }
                 EditorKeyboardBar.KeyType.TAB -> {
                     binding.editorView.insertTextAtCursor("\t")
                 }
@@ -110,18 +114,11 @@ class EditorActivity : AppCompatActivity() {
                         binding.editorView.text.delete(start, start + 1)
                     }
                 }
-                EditorKeyboardBar.KeyType.ARROW_LEFT -> {
-                    moveCursor(KeyEvent.KEYCODE_DPAD_LEFT)
-                }
-                EditorKeyboardBar.KeyType.ARROW_RIGHT -> {
-                    moveCursor(KeyEvent.KEYCODE_DPAD_RIGHT)
-                }
-                EditorKeyboardBar.KeyType.ARROW_UP -> {
-                    moveCursor(KeyEvent.KEYCODE_DPAD_UP)
-                }
-                EditorKeyboardBar.KeyType.ARROW_DOWN -> {
-                    moveCursor(KeyEvent.KEYCODE_DPAD_DOWN)
-                }
+                EditorKeyboardBar.KeyType.ARROW_LEFT -> moveCursor(KeyEvent.KEYCODE_DPAD_LEFT)
+                EditorKeyboardBar.KeyType.ARROW_RIGHT -> moveCursor(KeyEvent.KEYCODE_DPAD_RIGHT)
+                EditorKeyboardBar.KeyType.ARROW_UP -> moveCursor(KeyEvent.KEYCODE_DPAD_UP)
+                EditorKeyboardBar.KeyType.ARROW_DOWN -> moveCursor(KeyEvent.KEYCODE_DPAD_DOWN)
+
                 // 修饰键由键盘栏内部消化，这里仅作兜底
                 EditorKeyboardBar.KeyType.CTRL,
                 EditorKeyboardBar.KeyType.ALT,
@@ -262,6 +259,7 @@ func _ready():
     private fun showCompletions(items: List<CompletionItem>) {
         if (items.isEmpty()) {
             hideCompletions()
+            Snackbar.make(binding.root, "没有可用的补全", Snackbar.LENGTH_SHORT).show()
             return
         }
         completionAdapter.submitList(items)

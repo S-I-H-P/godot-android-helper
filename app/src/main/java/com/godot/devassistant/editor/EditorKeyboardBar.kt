@@ -17,6 +17,7 @@ import android.widget.TextView
  * - 等宽分布（每行按键平均分配宽度）
  * - M3E 风格：圆角胶囊按键、色调表面、按压涟漪
  * - CTRL / ALT 为粘滞修饰键：按下后下一个字符会转成控制字符 / ESC+字符
+ * - 「补全」按键：手动触发一次代码补全（不再随输入自动触发）
  */
 class EditorKeyboardBar @JvmOverloads constructor(
     context: Context,
@@ -33,13 +34,13 @@ class EditorKeyboardBar @JvmOverloads constructor(
     private var altKey: TextView? = null
 
     // 颜色
-    private val colorKeyBg = 0xFF2A2A3E.toInt()
     private val colorSpecialBg = 0xFF3D3D55.toInt()
     private val colorAccentBg = 0xFF4A90D9.toInt()
+    private val colorCompleteBg = 0xFF2E7D5B.toInt()
     private val colorText = 0xFFCDD6F4.toInt()
     private val colorTextDim = 0xFF9CA3AF.toInt()
 
-    /** 按键定义：标签 -> 类型 */
+    /** 按键定义 */
     private data class KeyDef(
         val label: String,
         val type: KeyType,
@@ -49,12 +50,13 @@ class EditorKeyboardBar @JvmOverloads constructor(
     )
 
     private val rows: List<List<KeyDef>> = listOf(
-        // 第一行：控制键
+        // 第一行：控制键 + 补全
         listOf(
             KeyDef("ESC", KeyType.TEXT, "\u001b", special = true),
             KeyDef("TAB", KeyType.TAB, "\t", special = true),
             KeyDef("CTRL", KeyType.CTRL, special = true),
             KeyDef("ALT", KeyType.ALT, special = true),
+            KeyDef("补全", KeyType.COMPLETE, special = true, flexible = 1.6f),
             KeyDef("⌫", KeyType.BACKSPACE, special = true),
             KeyDef("DEL", KeyType.DELETE, special = true),
             KeyDef("←", KeyType.ARROW_LEFT, special = true),
@@ -106,11 +108,7 @@ class EditorKeyboardBar @JvmOverloads constructor(
         for (row in rows) {
             val rowLayout = LinearLayout(context).apply {
                 orientation = HORIZONTAL
-                layoutParams = LayoutParams(
-                    LayoutParams.MATCH_PARENT,
-                    0,
-                    1f
-                )
+                layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f)
             }
             for (key in row) {
                 rowLayout.addView(createKeyView(key))
@@ -123,8 +121,8 @@ class EditorKeyboardBar @JvmOverloads constructor(
         val tv = TextView(context).apply {
             text = key.label
             gravity = Gravity.CENTER
-            setTextColor(if (key.special) colorText else colorText)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            setTextColor(colorText)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             setBackgroundResource(
                 if (key.special) com.godot.devassistant.R.drawable.bg_key_special
                 else com.godot.devassistant.R.drawable.bg_key
@@ -136,6 +134,11 @@ class EditorKeyboardBar @JvmOverloads constructor(
                 setMargins(m, m, m, m)
             }
             setOnClickListener { handleKey(key) }
+        }
+
+        // 「补全」按键用绿色底，视觉上区分开
+        if (key.type == KeyType.COMPLETE) {
+            tv.setBackgroundColor(colorCompleteBg)
         }
 
         when (key.type) {
@@ -161,17 +164,20 @@ class EditorKeyboardBar @JvmOverloads constructor(
                 refreshModifierState()
                 return
             }
+            KeyType.COMPLETE -> {
+                onKeyPressed(KeyType.COMPLETE, "")
+                return
+            }
             else -> {}
         }
 
         var outText = key.text
-        var outType = key.type
+        val outType = key.type
 
         // 修饰键转换（仅对普通文本键生效）
         if (key.type == KeyType.TEXT && key.text.isNotEmpty()) {
             val ch = key.text[0]
             if (ctrlOn) {
-                // Ctrl+A..Z -> 0x01..0x1A
                 val upper = ch.uppercaseChar()
                 if (upper in 'A'..'Z') {
                     outText = ((upper.code - 'A'.code + 1).toChar()).toString()
@@ -207,10 +213,12 @@ class EditorKeyboardBar @JvmOverloads constructor(
     private fun dp(value: Int): Int =
         (value * resources.displayMetrics.density).toInt()
 
-    /** 按键类型（与 EditorActivity 的处理保持一致） */
+    /** 按键类型 */
     enum class KeyType {
         TAB, SHIFT, TEXT, NEWLINE, BACKSPACE, DELETE,
         ARROW_LEFT, ARROW_RIGHT, ARROW_UP, ARROW_DOWN,
-        CTRL, ALT
+        CTRL, ALT,
+        /** 手动触发代码补全 */
+        COMPLETE
     }
 }

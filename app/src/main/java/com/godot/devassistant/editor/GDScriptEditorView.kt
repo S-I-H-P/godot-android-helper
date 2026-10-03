@@ -9,22 +9,28 @@ import android.text.Spanned
 import android.text.TextWatcher
 import android.text.style.ForegroundColorSpan
 import android.util.AttributeSet
+import android.util.Log
 import android.widget.EditText
 import com.godot.devassistant.model.CompletionItem
 import com.godot.devassistant.model.HighlightRange
 import com.godot.devassistant.native.NativeLib
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.max
 
 /**
  * GDScript 代码编辑器视图
  *
  * 关键点：
- * 1. 语法高亮直接修改 Editable 的 span，**不调用 setText**，
- *    否则光标会被重置到开头。
- * 2. 所有原生库调用都用 Throwable 捕获
- *    （UnsatisfiedLinkError 属于 Error 而非 Exception）。
+ * 1. 语法高亮直接修改 Editable 的 span，不调用 setText（否则光标被重置）
+ * 2. 所有原生库调用都放到 IO 线程，绝不阻塞主线程（否则 ANR）
+ * 3. 代码补全为【手动触发】——由键盘栏的「补全」按键调用 requestCompletionsNow()
+ * 4. 传给原生的文本做长度截断，避免大文件 tokenize 卡死
  */
 class GDScriptEditorView @JvmOverloads constructor(
     context: Context,
@@ -32,7 +38,11 @@ class GDScriptEditorView @JvmOverloads constructor(
 ) : EditText(context, attrs) {
 
     companion object {
+        private const val TAG = "GDScriptEditor"
         private val gson = Gson()
+
+        /** 传给原生的最大字符数（只取光标前的一段，够词法分析用） */
+        private const val MAX_NATIVE_CHARS = 4000
 
         private const val COLOR_BACKGROUND = 0xFF1E1E2E.toInt()
         private const val COLOR_TEXT = 0xFFCDD6F4.toInt()
@@ -53,9 +63,16 @@ class GDScriptEditorView @JvmOverloads constructor(
     var isModified: Boolean = false
         private set
 
+    /** 后台任务作用域（主线程调度，计算切到 IO） */
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
     private var highlightTask: Runnable? = null
-    private var completionRunnable: Runnable? = null
-    private var lastTextForCompletion = ""
+
+    /** 高亮请求序号：只有最新一次的结果才会被应用，避免旧结果覆盖新结果 */
+    private var highlightVersion = 0
+
+    /** 补全请求序号 */
+    private var completionVersion = 0
 
     private val lineNumberPaint = Paint().apply {
         color = COLOR_LINE_NUMBER
@@ -86,8 +103,8 @@ class GDScriptEditorView @JvmOverloads constructor(
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 isModified = true
                 onTextChangedListener?.invoke(true)
+                // 只保留高亮防抖；补全已改为手动触发
                 scheduleHighlight()
-                scheduleCompletion()
             }
             override fun afterTextChanged(s: Editable?) {}
         })
@@ -139,96 +156,138 @@ class GDScriptEditorView @JvmOverloads constructor(
         return 40f + digits * 8f
     }
 
+    // ==================== 语法高亮（后台线程） ====================
+
     private fun scheduleHighlight() {
         highlightTask?.let { removeCallbacks(it) }
         highlightTask = Runnable { applyHighlighting() }
-        postDelayed(highlightTask, 200)
+        postDelayed(highlightTask, 300)
     }
 
     /**
      * 应用语法高亮
      *
-     * 直接在 Editable 上增删 span，不重建文本，因此光标位置保持不变。
+     * 计算在 IO 线程完成，回到主线程只做 span 增删，不重建文本。
      */
     fun applyHighlighting() {
-        val editable: Editable = text ?: return
-        val source = editable.toString()
+        val source = text?.toString() ?: return
         if (source.isEmpty()) return
 
-        try {
-            val json = NativeLib.highlightCode(source)
-            val ranges: List<HighlightRange> = gson.fromJson(
-                json,
-                object : TypeToken<List<HighlightRange>>() {}.type
-            ) ?: return
+        val myVersion = ++highlightVersion
 
-            // 清除旧的着色 span（只清 ForegroundColorSpan，不影响其它 span）
-            for (span in editable.getSpans(0, editable.length, ForegroundColorSpan::class.java)) {
-                editable.removeSpan(span)
-            }
-
-            // 应用新着色
-            for (range in ranges) {
-                val start = range.start.coerceIn(0, source.length)
-                val end = range.end.coerceIn(start, source.length)
-                if (start >= end) continue
-
-                val color = when (range.type) {
-                    1 -> COLOR_KEYWORD
-                    2 -> COLOR_TYPE
-                    3 -> COLOR_FUNCTION
-                    4 -> COLOR_COMMENT
-                    5 -> COLOR_STRING
-                    6 -> COLOR_NUMBER
-                    9 -> COLOR_TYPE
-                    10 -> COLOR_NUMBER
-                    else -> COLOR_TEXT
+        scope.launch {
+            val json = withContext(Dispatchers.IO) {
+                try {
+                    NativeLib.highlightCode(source)
+                } catch (e: Throwable) {
+                    null
                 }
-                editable.setSpan(
-                    ForegroundColorSpan(color), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                )
+            } ?: return@launch
+
+            // 期间又有新的高亮请求，丢弃本次结果
+            if (myVersion != highlightVersion) return@launch
+
+            try {
+                val ranges: List<HighlightRange> = gson.fromJson(
+                    json,
+                    object : TypeToken<List<HighlightRange>>() {}.type
+                ) ?: return@launch
+
+                val editable: Editable = text ?: return@launch
+                // 文本可能在计算期间被改短了
+                if (editable.length != source.length) return@launch
+
+                for (span in editable.getSpans(0, editable.length, ForegroundColorSpan::class.java)) {
+                    editable.removeSpan(span)
+                }
+
+                for (range in ranges) {
+                    val start = range.start.coerceIn(0, editable.length)
+                    val end = range.end.coerceIn(start, editable.length)
+                    if (start >= end) continue
+
+                    val color = when (range.type) {
+                        1 -> COLOR_KEYWORD
+                        2 -> COLOR_TYPE
+                        3 -> COLOR_FUNCTION
+                        4 -> COLOR_COMMENT
+                        5 -> COLOR_STRING
+                        6 -> COLOR_NUMBER
+                        9 -> COLOR_TYPE
+                        10 -> COLOR_NUMBER
+                        else -> COLOR_TEXT
+                    }
+                    editable.setSpan(
+                        ForegroundColorSpan(color), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
+                }
+            } catch (e: Throwable) {
+                // 忽略高亮错误
             }
-            // 不调用 setText，光标与滚动位置都不会变化
-        } catch (e: Throwable) {
-            // 高亮失败（含原生库缺失）时保留原文
         }
     }
 
-    private fun scheduleCompletion() {
-        if (!autoCompleteEnabled) return
-        completionRunnable?.let { removeCallbacks(it) }
-        completionRunnable = Runnable { requestCompletions() }
-        postDelayed(completionRunnable, 300)
-    }
+    // ==================== 代码补全（手动触发） ====================
 
-    private fun requestCompletions() {
+    /**
+     * 手动请求一次代码补全（由键盘栏「补全」按键调用）
+     *
+     * 计算在 IO 线程，绝不阻塞主线程。
+     */
+    fun requestCompletionsNow() {
+        if (!autoCompleteEnabled) return
+
         val cursor = selectionStart
-        val source = text.toString()
+        val source = text?.toString() ?: return
         if (cursor < 0 || cursor > source.length) return
 
         val prefix = source.substring(0, cursor)
         if (prefix.isEmpty() || prefix.endsWith("\n")) return
 
         val currentWord = extractCurrentWord(source, cursor)
-        if (currentWord.isEmpty()) return
 
-        if (prefix == lastTextForCompletion) return
-        lastTextForCompletion = prefix
+        // 只把光标前最近的一段发给原生，避免大文件 tokenize 卡死
+        val nativeInput = if (prefix.length > MAX_NATIVE_CHARS) {
+            prefix.substring(prefix.length - MAX_NATIVE_CHARS)
+        } else {
+            prefix
+        }
 
-        try {
-            val json = NativeLib.getCompletions(prefix)
-            val items: List<CompletionItem> = gson.fromJson(
-                json,
-                object : TypeToken<List<CompletionItem>>() {}.type
-            ) ?: return
-            if (items.isNotEmpty()) {
-                onCompletionRequest(items)
+        val myVersion = ++completionVersion
+
+        scope.launch {
+            val json = withContext(Dispatchers.IO) {
+                try {
+                    NativeLib.getCompletions(nativeInput)
+                } catch (e: Throwable) {
+                    null
+                }
+            } ?: return@launch
+
+            if (myVersion != completionVersion) return@launch
+
+            try {
+                val items: List<CompletionItem> = gson.fromJson(
+                    json,
+                    object : TypeToken<List<CompletionItem>>() {}.type
+                ) ?: return@launch
+
+                // 光标已移动则丢弃
+                if (selectionStart != cursor) return@launch
+
+                if (items.isNotEmpty()) {
+                    onCompletionRequest(items)
+                } else if (currentWord.isNotEmpty()) {
+                    // 没有补全项时给个提示，让用户知道按键生效了
+                    onCompletionRequest(emptyList())
+                }
+            } catch (e: Throwable) {
+                Log.e(TAG, "补全解析失败", e)
             }
-        } catch (e: Throwable) {
-            // 忽略补全错误
         }
     }
 
+    /** 提取光标前的当前单词 */
     private fun extractCurrentWord(source: String, cursor: Int): String {
         val sb = StringBuilder()
         var i = cursor - 1
@@ -257,6 +316,8 @@ class GDScriptEditorView @JvmOverloads constructor(
         text.replace(wordStart, cursor, item.text)
         setSelection(wordStart + item.text.length)
     }
+
+    // ==================== 文本操作 ====================
 
     fun insertTextAtCursor(insertText: String) {
         val start = selectionStart
@@ -363,7 +424,6 @@ class GDScriptEditorView @JvmOverloads constructor(
     fun setFileContent(content: String) {
         setText(content)
         isModified = false
-        // 光标放到开头
         setSelection(0)
         applyHighlighting()
     }
