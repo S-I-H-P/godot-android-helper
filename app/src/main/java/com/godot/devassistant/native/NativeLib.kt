@@ -3,6 +3,12 @@ package com.godot.devassistant.native
 import android.content.Context
 import android.util.Log
 
+/**
+ * 原生库桥接类
+ *
+ * external 函数名与 C++ 导出符号严格对应：
+ * Java_com_godot_devassistant_native_NativeLib_nativeXxx
+ */
 object NativeLib {
 
     private var loaded = false
@@ -17,79 +23,76 @@ object NativeLib {
         }
     }
 
-    private fun ensureLoaded() {
-        if (!loaded) {
-            throw RuntimeException("原生库不可用")
-        }
-    }
+    /** 原生库是否可用 */
+    val isAvailable: Boolean get() = loaded
 
     @JvmStatic
     fun init(context: Context) {
         if (!loaded) return
-        nativeInit(context)
+        try { nativeInit(context) } catch (e: Throwable) { Log.e("NativeLib", "init 失败", e) }
     }
 
     @JvmStatic
     fun scanProjects(baseDir: String): String {
         if (!loaded) return "[]"
-        return nativeScanProjects(baseDir)
+        return try { nativeScanProjects(baseDir) } catch (e: Throwable) { "[]" }
     }
 
     @JvmStatic
     fun readFile(filePath: String): String? {
         if (!loaded) return null
-        return nativeReadFile(filePath)
+        return try { nativeReadFile(filePath) } catch (e: Throwable) { null }
     }
 
     @JvmStatic
     fun writeFile(filePath: String, content: String): Boolean {
         if (!loaded) return false
-        return nativeWriteFile(filePath, content)
+        return try { nativeWriteFile(filePath, content) } catch (e: Throwable) { false }
     }
 
     @JvmStatic
     fun highlightCode(code: String): String {
         if (!loaded) return "[]"
-        return nativeHighlight(code)
+        return try { nativeHighlight(code) } catch (e: Throwable) { "[]" }
     }
 
     @JvmStatic
     fun getCompletions(code: String): String {
         if (!loaded) return "[]"
-        return nativeGetCompletions(code)
+        return try { nativeGetCompletions(code) } catch (e: Throwable) { "[]" }
     }
 
     @JvmStatic
     fun searchDocs(keyword: String): String {
         if (!loaded) return "[]"
-        return nativeSearchDocs(keyword)
+        return try { nativeSearchDocs(keyword) } catch (e: Throwable) { "[]" }
     }
 
     @JvmStatic
     fun getDocContent(docId: String): String? {
         if (!loaded) return null
-        return nativeGetDocContent(docId)
+        return try { nativeGetDocContent(docId) } catch (e: Throwable) { null }
     }
 
     @JvmStatic
     fun getAllDocIds(): String {
         if (!loaded) return "[\"gdscript_reference\"]"
-        return nativeGetAllDocIds()
+        return try { nativeGetAllDocIds() } catch (e: Throwable) { "[\"gdscript_reference\"]" }
     }
 
     @JvmStatic
     fun saveSetting(key: String, value: String) {
         if (!loaded) return
-        nativeSaveSetting(key, value)
+        try { nativeSaveSetting(key, value) } catch (e: Throwable) { }
     }
 
     @JvmStatic
     fun getSetting(key: String, defaultValue: String): String {
         if (!loaded) return defaultValue
-        return nativeGetSetting(key, defaultValue)
+        return try { nativeGetSetting(key, defaultValue) } catch (e: Throwable) { defaultValue }
     }
 
-    // JNI 声明
+    // ==================== JNI 声明 ====================
     private external fun nativeInit(context: Context)
     private external fun nativeScanProjects(baseDir: String): String
     private external fun nativeReadFile(filePath: String): String?

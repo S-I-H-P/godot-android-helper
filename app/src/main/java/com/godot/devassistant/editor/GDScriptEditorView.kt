@@ -5,15 +5,11 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.text.Editable
 import android.text.InputType
-import android.text.Spannable
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.TextWatcher
 import android.text.style.ForegroundColorSpan
 import android.util.AttributeSet
-import android.view.ActionMode
-import android.view.Menu
-import android.view.MenuItem
 import android.widget.EditText
 import com.godot.devassistant.model.CompletionItem
 import com.godot.devassistant.model.HighlightRange
@@ -22,13 +18,18 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlin.math.max
 
+/**
+ * GDScript 代码编辑器视图
+ *
+ * 注意：所有原生库调用都用 Throwable 捕获，
+ * 因为 UnsatisfiedLinkError 属于 Error 而非 Exception。
+ */
 class GDScriptEditorView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null
 ) : EditText(context, attrs) {
 
     companion object {
-        private const val TAG = "GDScriptEditor"
         private val gson = Gson()
 
         private const val COLOR_BACKGROUND = 0xFF1E1E2E.toInt()
@@ -41,7 +42,6 @@ class GDScriptEditorView @JvmOverloads constructor(
         private const val COLOR_FUNCTION = 0xFF82AAFF.toInt()
         private const val COLOR_LINE_NUMBER = 0xFF4A4A6A.toInt()
         private const val COLOR_CURRENT_LINE = 0xFF2A2A3E.toInt()
-        private const val COLOR_CURSOR = 0xFF82AAFF.toInt()
     }
 
     var showLineNumbers: Boolean = true
@@ -92,57 +92,41 @@ class GDScriptEditorView @JvmOverloads constructor(
     }
 
     override fun onDraw(canvas: Canvas) {
-        // 确保 layout 已初始化
-        requestLayout()
         if (layout != null) {
-            drawCurrentLineHighlight(canvas)
-            drawLineNumbers(canvas)
+            try {
+                drawCurrentLineHighlight(canvas)
+                drawLineNumbers(canvas)
+            } catch (e: Throwable) {
+                // 忽略绘制异常
+            }
         }
         super.onDraw(canvas)
     }
 
     private fun drawCurrentLineHighlight(canvas: Canvas) {
-        val lineCount = layout?.lineCount ?: return
-        if (selectionStart >= 0 && selectionStart < (text?.length ?: 0)) {
-            val line = layout?.getLineForOffset(selectionStart) ?: return
-            val lineTop = layout.getLineTop(line).toFloat()
-            val lineBottom = layout.getLineBottom(line).toFloat()
-            val left = if (showLineNumbers) lineNumberWidth() else 0f
-            canvas.drawRect(
-                left,
-                lineTop,
-                width.toFloat(),
-                lineBottom,
-                currentLinePaint
-            )
-        }
+        val len = text?.length ?: 0
+        val pos = selectionStart
+        if (pos < 0 || pos > len) return
+        val line = layout?.getLineForOffset(pos) ?: return
+        val lineTop = layout.getLineTop(line).toFloat()
+        val lineBottom = layout.getLineBottom(line).toFloat()
+        val left = if (showLineNumbers) lineNumberWidth() else 0f
+        canvas.drawRect(left, lineTop, width.toFloat(), lineBottom, currentLinePaint)
     }
 
     private fun drawLineNumbers(canvas: Canvas) {
         if (!showLineNumbers || layout == null) return
 
         val firstLine = layout.getLineForVertical(scrollY)
-        val lastLine = minOf(
-            layout.getLineForVertical(scrollY + height),
-            layout.lineCount - 1
-        )
+        val lastLine = minOf(layout.getLineForVertical(scrollY + height), layout.lineCount - 1)
         val lnWidth = lineNumberWidth()
 
         for (line in firstLine..lastLine) {
             val lineTop = layout.getLineTop(line).toFloat()
             val lineBottom = layout.getLineBottom(line).toFloat()
-            val lineNumber = line + 1
-            val text = lineNumber.toString()
-
             val fm = lineNumberPaint.fontMetrics
             val baseline = lineTop + (lineBottom - lineTop - (fm.descent - fm.ascent)) / 2 - fm.ascent
-
-            canvas.drawText(
-                text,
-                lnWidth - 12f,
-                baseline,
-                lineNumberPaint
-            )
+            canvas.drawText((line + 1).toString(), lnWidth - 12f, baseline, lineNumberPaint)
         }
     }
 
@@ -159,6 +143,7 @@ class GDScriptEditorView @JvmOverloads constructor(
         postDelayed(highlightTask, 200)
     }
 
+    /** 应用语法高亮 */
     fun applyHighlighting() {
         val source = text.toString()
         if (source.isEmpty()) return
@@ -168,7 +153,7 @@ class GDScriptEditorView @JvmOverloads constructor(
             val ranges: List<HighlightRange> = gson.fromJson(
                 json,
                 object : TypeToken<List<HighlightRange>>() {}.type
-            )
+            ) ?: return
 
             val spannable = SpannableStringBuilder(source)
 
@@ -198,8 +183,8 @@ class GDScriptEditorView @JvmOverloads constructor(
             }
 
             setText(spannable, BufferType.SPANNABLE)
-        } catch (e: Exception) {
-            // 忽略高亮错误
+        } catch (e: Throwable) {
+            // 高亮失败（含原生库缺失）时保留原文
         }
     }
 
@@ -219,7 +204,7 @@ class GDScriptEditorView @JvmOverloads constructor(
         if (prefix.isEmpty() || prefix.endsWith("\n")) return
 
         val currentWord = extractCurrentWord(source, cursor)
-        if (currentWord.length < 1) return
+        if (currentWord.isEmpty()) return
 
         if (prefix == lastTextForCompletion) return
         lastTextForCompletion = prefix
@@ -229,11 +214,11 @@ class GDScriptEditorView @JvmOverloads constructor(
             val items: List<CompletionItem> = gson.fromJson(
                 json,
                 object : TypeToken<List<CompletionItem>>() {}.type
-            )
+            ) ?: return
             if (items.isNotEmpty()) {
                 onCompletionRequest(items)
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             // 忽略补全错误
         }
     }
@@ -260,11 +245,7 @@ class GDScriptEditorView @JvmOverloads constructor(
         var wordStart = cursor
         while (wordStart > 0) {
             val c = source[wordStart - 1]
-            if (c.isLetterOrDigit() || c == '_') {
-                wordStart--
-            } else {
-                break
-            }
+            if (c.isLetterOrDigit() || c == '_') wordStart-- else break
         }
 
         text.replace(wordStart, cursor, item.text)
@@ -293,7 +274,6 @@ class GDScriptEditorView @JvmOverloads constructor(
             if (nextLine == -1) break
             pos = nextLine + 1
         }
-
         setText(sb)
         setSelection(start + 4, end + 4)
     }
@@ -315,7 +295,6 @@ class GDScriptEditorView @JvmOverloads constructor(
             if (nextLine == -1) break
             pos = nextLine + 1
         }
-
         setText(sb)
         setSelection(max(0, start - 4), max(0, end - 4))
     }
@@ -335,7 +314,6 @@ class GDScriptEditorView @JvmOverloads constructor(
         } else {
             sb.insert(lineStart, "#")
         }
-
         setText(sb)
         setSelection(lineStart + 1, lineEnd + 1)
     }
