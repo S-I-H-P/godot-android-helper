@@ -2,13 +2,10 @@ package com.godot.devassistant.ui
 
 import android.net.Uri
 import android.os.Bundle
-import android.text.Editable
-import android.text.TextWatcher
 import android.view.KeyEvent
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
-import android.view.inputmethod.InputMethodManager
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -18,21 +15,11 @@ import com.godot.devassistant.data.ProjectRepository
 import com.godot.devassistant.databinding.ActivityEditorBinding
 import com.godot.devassistant.editor.CompletionAdapter
 import com.godot.devassistant.editor.EditorKeyboardBar
-import com.godot.devassistant.editor.GDScriptEditorView
 import com.godot.devassistant.model.CompletionItem
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /**
  * 代码编辑器界面
- *
- * 功能：
- * - 编辑 .gd 文件
- * - 语法高亮
- * - 代码补全
- * - 键盘工具栏
- * - 保存/另存为
  */
 class EditorActivity : AppCompatActivity() {
 
@@ -51,7 +38,6 @@ class EditorActivity : AppCompatActivity() {
 
         repository = ProjectRepository(this)
 
-        // 获取传入的项目信息
         projectName = intent.getStringExtra("project_name") ?: "未命名项目"
         projectUri = intent.getStringExtra("project_uri")?.let { Uri.parse(it) }
 
@@ -67,29 +53,21 @@ class EditorActivity : AppCompatActivity() {
         loadScriptList()
     }
 
-    /**
-     * 设置编辑器
-     */
     private fun setupEditor() {
         binding.editorView.apply {
             showLineNumbers = true
             autoCompleteEnabled = true
 
-            // 补全回调
             onCompletionRequest = { items ->
                 showCompletions(items)
             }
 
-            // 修改状态回调
             onTextChangedListener = { dirty ->
                 supportActionBar?.title = if (dirty) "* $projectName" else projectName
             }
         }
     }
 
-    /**
-     * 设置补全列表
-     */
     private fun setupCompletionList() {
         completionAdapter = CompletionAdapter { item ->
             binding.editorView.insertCompletion(item)
@@ -103,64 +81,61 @@ class EditorActivity : AppCompatActivity() {
     }
 
     /**
-     * 设置键盘工具栏
+     * 键盘工具栏事件处理
      */
     private fun setupKeyboardBar() {
         binding.keyboardBar.onKeyPressed = { type, text ->
             when (type) {
                 EditorKeyboardBar.KeyType.TAB -> {
-                    binding.editorView.insertTextAtCursor(text)
+                    binding.editorView.insertTextAtCursor("\t")
                 }
                 EditorKeyboardBar.KeyType.TEXT -> {
                     binding.editorView.insertTextAtCursor(text)
                 }
                 EditorKeyboardBar.KeyType.NEWLINE -> {
                     binding.editorView.insertTextAtCursor("\n")
-                    // 自动缩进
                     autoIndent()
                 }
                 EditorKeyboardBar.KeyType.BACKSPACE -> {
-                    binding.editorView.onKeyDown(
-                        KeyEvent.KEYCODE_DEL,
+                    binding.editorView.dispatchKeyEvent(
                         KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL)
+                    )
+                    binding.editorView.dispatchKeyEvent(
+                        KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DEL)
                     )
                 }
                 EditorKeyboardBar.KeyType.DELETE -> {
-                    // 向前删除
                     val start = binding.editorView.selectionStart
-                    if (start < binding.editorView.text.length) {
+                    if (start in 0 until binding.editorView.text.length) {
                         binding.editorView.text.delete(start, start + 1)
                     }
                 }
                 EditorKeyboardBar.KeyType.ARROW_LEFT -> {
-                    binding.editorView.onKeyDown(
-                        KeyEvent.KEYCODE_DPAD_LEFT,
-                        KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_LEFT)
-                    )
+                    moveCursor(KeyEvent.KEYCODE_DPAD_LEFT)
                 }
                 EditorKeyboardBar.KeyType.ARROW_RIGHT -> {
-                    binding.editorView.onKeyDown(
-                        KeyEvent.KEYCODE_DPAD_RIGHT,
-                        KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT)
-                    )
+                    moveCursor(KeyEvent.KEYCODE_DPAD_RIGHT)
                 }
                 EditorKeyboardBar.KeyType.ARROW_UP -> {
-                    binding.editorView.onKeyDown(
-                        KeyEvent.KEYCODE_DPAD_UP,
-                        KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_UP)
-                    )
+                    moveCursor(KeyEvent.KEYCODE_DPAD_UP)
                 }
                 EditorKeyboardBar.KeyType.ARROW_DOWN -> {
-                    binding.editorView.onKeyDown(
-                        KeyEvent.KEYCODE_DPAD_DOWN,
-                        KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_DOWN)
-                    )
+                    moveCursor(KeyEvent.KEYCODE_DPAD_DOWN)
                 }
+                // 修饰键由键盘栏内部消化，这里仅作兜底
+                EditorKeyboardBar.KeyType.CTRL,
+                EditorKeyboardBar.KeyType.ALT,
                 EditorKeyboardBar.KeyType.SHIFT -> {
-                    // Shift 状态由工具栏内部管理
+                    // 无需处理
                 }
             }
         }
+    }
+
+    /** 通过派发按键事件移动光标 */
+    private fun moveCursor(keyCode: Int) {
+        binding.editorView.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
+        binding.editorView.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, keyCode))
     }
 
     /**
@@ -170,24 +145,20 @@ class EditorActivity : AppCompatActivity() {
         val editor = binding.editorView
         val cursor = editor.selectionStart
         val source = editor.text.toString()
+        if (cursor <= 0 || cursor > source.length) return
 
-        // 获取上一行
         val prevLineEnd = source.lastIndexOf('\n', cursor - 1)
-        if (prevLineEnd == -1) return
-        val prevLineStart = source.lastIndexOf('\n', prevLineEnd - 1) + 1
-        val prevLine = source.substring(prevLineStart, prevLineEnd)
+        val prevLineStart = if (prevLineEnd <= 0) 0 else source.lastIndexOf('\n', prevLineEnd - 1) + 1
+        val end = if (prevLineEnd == -1) cursor else prevLineEnd
+        if (prevLineStart >= end) return
 
-        // 计算缩进
+        val prevLine = source.substring(prevLineStart, end)
+
         val indent = StringBuilder()
         for (c in prevLine) {
-            if (c == ' ' || c == '\t') {
-                indent.append(c)
-            } else {
-                break
-            }
+            if (c == ' ' || c == '\t') indent.append(c) else break
         }
 
-        // 如果上一行以冒号结尾，增加一级缩进
         val trimmed = prevLine.trimEnd()
         if (trimmed.endsWith(":")) {
             indent.append("    ")
@@ -198,27 +169,19 @@ class EditorActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * 加载脚本列表
-     */
     private fun loadScriptList() {
         projectUri?.let { uri ->
             lifecycleScope.launch {
                 val scripts = repository.loadScriptTree(uri)
-                // 显示脚本列表（简化版：直接在 Snackbar 提示）
                 if (scripts.isEmpty()) {
                     Snackbar.make(binding.root, "项目中没有 .gd 脚本文件", Snackbar.LENGTH_LONG).show()
                 } else {
-                    // 创建第一个脚本的新文件模板
                     showScriptPicker(scripts.map { it.name to it.uri })
                 }
             }
         }
     }
 
-    /**
-     * 显示脚本选择器
-     */
     private fun showScriptPicker(scripts: List<Pair<String, Uri>>) {
         val names = scripts.map { it.first }.toTypedArray()
         com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
@@ -233,9 +196,6 @@ class EditorActivity : AppCompatActivity() {
             .show()
     }
 
-    /**
-     * 新建脚本
-     */
     private fun showCreateScriptDialog() {
         val input = android.widget.EditText(this).apply {
             hint = "脚本名.gd"
@@ -253,15 +213,11 @@ class EditorActivity : AppCompatActivity() {
             .show()
     }
 
-    /**
-     * 创建新脚本文件
-     */
     private fun createNewScript(fileName: String) {
         projectUri?.let { uri ->
             lifecycleScope.launch {
                 val fileUri = repository.createScript(uri, fileName)
                 if (fileUri != null) {
-                    // 写入模板
                     val template = buildScriptTemplate(fileName)
                     repository.saveScript(fileUri, template)
                     openScript(fileUri)
@@ -272,9 +228,6 @@ class EditorActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * 生成脚本模板
-     */
     private fun buildScriptTemplate(fileName: String): String {
         val className = fileName.removeSuffix(".gd").replaceFirstChar { it.uppercase() }
         return """extends Node
@@ -297,9 +250,6 @@ func _ready():
 """
     }
 
-    /**
-     * 打开脚本文件
-     */
     private fun openScript(uri: Uri) {
         currentFileUri = uri
         lifecycleScope.launch {
@@ -309,9 +259,6 @@ func _ready():
         }
     }
 
-    /**
-     * 显示补全列表
-     */
     private fun showCompletions(items: List<CompletionItem>) {
         if (items.isEmpty()) {
             hideCompletions()
@@ -321,9 +268,6 @@ func _ready():
         binding.completionList.visibility = View.VISIBLE
     }
 
-    /**
-     * 隐藏补全列表
-     */
     private fun hideCompletions() {
         binding.completionList.visibility = View.GONE
     }
@@ -367,9 +311,6 @@ func _ready():
         }
     }
 
-    /**
-     * 保存当前文件
-     */
     private fun saveCurrentFile() {
         currentFileUri?.let { uri ->
             lifecycleScope.launch {
@@ -388,9 +329,6 @@ func _ready():
         }
     }
 
-    /**
-     * 跳转行对话框
-     */
     private fun showGotoLineDialog() {
         val input = android.widget.EditText(this).apply {
             inputType = android.text.InputType.TYPE_CLASS_NUMBER
@@ -407,6 +345,7 @@ func _ready():
             .show()
     }
 
+    @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         if (binding.editorView.isModified) {
             com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
@@ -420,6 +359,7 @@ func _ready():
                 .setNeutralButton("取消", null)
                 .show()
         } else {
+            @Suppress("DEPRECATION")
             super.onBackPressed()
         }
     }
