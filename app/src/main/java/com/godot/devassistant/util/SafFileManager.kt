@@ -3,6 +3,7 @@ package com.godot.devassistant.util
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.provider.DocumentsContract
 import android.util.Log
 import androidx.documentfile.provider.DocumentFile
 import kotlinx.coroutines.Dispatchers
@@ -151,14 +152,16 @@ object SafFileManager {
         }
 
     /**
-     * 创建新文件。
+     * 创建新文件，并在 MTP 篡改扩展名后自动重命名兜底。
      *
-     * 关键：mimeType 默认用 "application/octet-stream" 而不是 "text/plain"。
-     * 在 Android MTP provider（外部存储 / 下载目录 / 应用沙盒）上，
-     * text/plain 类型会被 provider 自动追加 ".txt"，导致
-     * "player.gd" 实际创建成 "player.gd.txt"，
-     * 而 collectScripts 只挑 endsWith(".gd")，脚本就永远进不了列表。
-     * octet-stream 不会触发 MTP 的 mime→ext 补全，扩展名原样保留。
+     * Android MTP provider 在部分实现上会无视 mime 追加 ".txt"，
+     * 不同 ROM / 目录表现不一致。稳妥做法：
+     *   1. 按请求名创建（octet-stream 尽量不触发追加）
+     *   2. 读回实际 name，若不一致 → DocumentsContract.renameDocument
+     *   3. 失败则走 copy-fallback（新建 + 复制 + 删旧）
+     *
+     * 返回的 Uri 在 rename 后仍指向同一物理文件（documentId 稳定），
+     * 上层继续用它读写字节即可。
      */
     suspend fun createFile(
         context: Context,
@@ -169,15 +172,70 @@ object SafFileManager {
         try {
             val doc = DocumentFile.fromTreeUri(context, parentUri)
             val created = doc?.createFile(mimeType, fileName)
-            if (created != null && created.exists()) {
-                created.uri
-            } else {
+            if (created == null || !created.exists()) {
                 Log.w(TAG, "创建文件失败: $fileName")
                 null
+            } else {
+                val actual = created.name
+                if (actual == fileName) {
+                    created.uri
+                } else {
+                    Log.w(TAG, "MTP 篡改了扩展名: 请求=$fileName 实际=$actual，尝试重命名")
+                    val ok = tryRename(context, created, fileName)
+                    if (ok) {
+                        Log.i(TAG, "重命名成功 → $fileName")
+                    } else {
+                        Log.e(TAG, "重命名失败，保留实际名字 $actual（上层会提示用户）")
+                    }
+                    created.uri
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "创建文件异常", e)
             null
+        }
+    }
+
+    /**
+     * 重命名兜底。优先 DocumentsContract.renameDocument（API 26+ 原生支持 MTP），
+     * 失败则走 copy-fallback。
+     */
+    private fun tryRename(context: Context, doc: DocumentFile, newName: String): Boolean {
+        // 方案 1：DocumentsContract.renameDocument
+        try {
+            val result = DocumentsContract.renameDocument(context.contentResolver, doc.uri, newName)
+            if (result != null && result.exists()) {
+                Log.i(TAG, "DocumentsContract.renameDocument 成功")
+                return true
+            }
+            Log.w(TAG, "DocumentsContract.renameDocument 返回 null / 不存在，走 copy-fallback")
+        } catch (e: Throwable) {
+            Log.w(TAG, "DocumentsContract.renameDocument 异常，走 copy-fallback", e)
+        }
+
+        // 方案 2：copy-fallback（读内容 → 新建 → 删旧）
+        return renameByCopy(context, doc, newName)
+    }
+
+    private fun renameByCopy(context: Context, doc: DocumentFile, newName: String): Boolean {
+        return try {
+            val content = readFile(context, doc.uri)
+
+            val parent = doc.parentFile ?: run {
+                Log.e(TAG, "copy-fallback: 取不到父目录")
+                return false
+            }
+            val newDoc = parent.createFile("application/octet-stream", newName) ?: run {
+                Log.e(TAG, "copy-fallback: 创建新文件失败 $newName")
+                return false
+            }
+            writeFile(context, newDoc.uri, content)
+            deleteFile(context, doc.uri)
+            Log.i(TAG, "copy-fallback: 成功 $newName")
+            true
+        } catch (e: Throwable) {
+            Log.e(TAG, "copy-fallback 失败", e)
+            false
         }
     }
 
