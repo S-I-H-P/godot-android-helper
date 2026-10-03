@@ -1,9 +1,13 @@
 name: Build & Release
 
+# 关键：on 段用引号 + 独立 tag 触发，避免 YAML 1.1 把裸 "on" 解析成布尔 True
+# 导致 GitHub 不识别触发条件、push 不生成 run 的问题。
 on:
   push:
-    branches: [ main, master ]
-    tags: [ 'v*' ]
+    branches:
+      - main
+      - master
+  pull_request:
   workflow_dispatch:
 
 jobs:
