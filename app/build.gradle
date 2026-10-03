@@ -4,6 +4,14 @@ plugins {
     id 'kotlin-kapt'
 }
 
+// ==================== 签名配置（从 CI 环境变量读取，绝不写死密码）====================
+// CI 在 workflow 里还原 keystore 并设置这些环境变量：
+//   KEYSTORE_PATH  = keystore 文件路径
+//   KEY_ALIAS      = 别名
+//   STORE_PASSWORD = 库密码
+//   KEY_PASSWORD   = key 密码
+// 本地没这些变量时自动回退到 debug 签名，不阻塞本地构建。
+
 android {
     namespace 'com.godot.devassistant'
     compileSdk 34
@@ -31,10 +39,28 @@ android {
         }
     }
 
+    // 只有 CI 提供了完整签名变量才创建 release 签名配置
+    if (System.getenv("KEYSTORE_PATH") != null &&
+        System.getenv("KEY_ALIAS") != null &&
+        System.getenv("STORE_PASSWORD") != null &&
+        System.getenv("KEY_PASSWORD") != null) {
+        signingConfigs {
+            release {
+                storeFile file(System.getenv("KEYSTORE_PATH"))
+                keyAlias System.getenv("KEY_ALIAS")
+                storePassword System.getenv("STORE_PASSWORD")
+                keyPassword System.getenv("KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // 有 release 签名配置就用它，否则回退到 debug 签名（本地构建）
+            def releaseConfig = signingConfigs.findByName("release")
+            signingConfig releaseConfig ?: signingConfigs.getByName("debug")
         }
     }
 

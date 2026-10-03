@@ -1,3 +1,18 @@
-.gradle/
+# Build outputs
+app/build/
+*/build/
 build/
+.gradle/
 local.properties
+
+# 签名文件（绝不提交进仓库）
+*.jks
+*.keystore
+signing/
+signing.properties
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.DS_Store
