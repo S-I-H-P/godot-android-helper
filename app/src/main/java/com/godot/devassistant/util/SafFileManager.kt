@@ -126,29 +126,49 @@ object SafFileManager {
         }
     }
 
+    /** 同步版读文件（用于 IO 线程里兜底逻辑，不走 suspend） */
+    private fun readFileBlocking(context: Context, fileUri: Uri): String {
+        return try {
+            context.contentResolver.openInputStream(fileUri)?.use { stream ->
+                stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+            } ?: ""
+        } catch (e: IOException) {
+            Log.e(TAG, "读取文件失败(blocking)", e)
+            ""
+        }
+    }
+
+    /** 同步版写文件（兜底用） */
+    private fun writeFileBlocking(context: Context, fileUri: Uri, content: String): Boolean {
+        return try {
+            context.contentResolver.openOutputStream(fileUri, "wt")?.use { stream ->
+                stream.write(content.toByteArray(Charsets.UTF_8))
+                true
+            } ?: false
+        } catch (e: IOException) {
+            Log.e(TAG, "写入文件失败(blocking)", e)
+            false
+        }
+    }
+
+    /** 同步版删文件（兜底用） */
+    private fun deleteFileBlocking(context: Context, fileUri: Uri): Boolean {
+        return try {
+            context.contentResolver.delete(fileUri, null, null) > 0
+        } catch (e: Exception) {
+            Log.e(TAG, "删除文件失败(blocking)", e)
+            false
+        }
+    }
+
     suspend fun readFile(context: Context, fileUri: Uri): String =
         withContext(Dispatchers.IO) {
-            try {
-                context.contentResolver.openInputStream(fileUri)?.use { stream ->
-                    stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                } ?: ""
-            } catch (e: IOException) {
-                Log.e(TAG, "读取文件失败", e)
-                ""
-            }
+            readFileBlocking(context, fileUri)
         }
 
     suspend fun writeFile(context: Context, fileUri: Uri, content: String): Boolean =
         withContext(Dispatchers.IO) {
-            try {
-                context.contentResolver.openOutputStream(fileUri, "wt")?.use { stream ->
-                    stream.write(content.toByteArray(Charsets.UTF_8))
-                    true
-                } ?: false
-            } catch (e: IOException) {
-                Log.e(TAG, "写入文件失败", e)
-                false
-            }
+            writeFileBlocking(context, fileUri, content)
         }
 
     /**
@@ -158,9 +178,9 @@ object SafFileManager {
      * 不同 ROM / 目录表现不一致。稳妥做法：
      *   1. 按请求名创建（octet-stream 尽量不触发追加）
      *   2. 读回实际 name，若不一致 → DocumentsContract.renameDocument
-     *   3. 失败则走 copy-fallback（新建 + 复制 + 删旧）
+     *   3. 失败则 copy-fallback（新建 + 复制 + 删旧）
      *
-     * 返回的 Uri 在 rename 后仍指向同一物理文件（documentId 稳定），
+     * 返回的 Uri 在 rename 后仍指向同一物理文件（MTP documentId 稳定），
      * 上层继续用它读写字节即可。
      */
     suspend fun createFile(
@@ -172,7 +192,7 @@ object SafFileManager {
         try {
             val doc = DocumentFile.fromTreeUri(context, parentUri)
             val created = doc?.createFile(mimeType, fileName)
-            if (created == null || !created.exists()) {
+            if (created == null || !created.isFile) {
                 Log.w(TAG, "创建文件失败: $fileName")
                 null
             } else {
@@ -185,7 +205,7 @@ object SafFileManager {
                     if (ok) {
                         Log.i(TAG, "重命名成功 → $fileName")
                     } else {
-                        Log.e(TAG, "重命名失败，保留实际名字 $actual（上层会提示用户）")
+                        Log.e(TAG, "重命名失败，保留实际名字 $actual")
                     }
                     created.uri
                 }
@@ -197,29 +217,33 @@ object SafFileManager {
     }
 
     /**
-     * 重命名兜底。优先 DocumentsContract.renameDocument（API 26+ 原生支持 MTP），
+     * 重命名兜底（同步，调用方已在 Dispatchers.IO 线程）。
+     * 优先 DocumentsContract.renameDocument（API 26 原生支持 MTP），
      * 失败则走 copy-fallback。
      */
     private fun tryRename(context: Context, doc: DocumentFile, newName: String): Boolean {
         // 方案 1：DocumentsContract.renameDocument
         try {
             val result = DocumentsContract.renameDocument(context.contentResolver, doc.uri, newName)
-            if (result != null && result.exists()) {
-                Log.i(TAG, "DocumentsContract.renameDocument 成功")
+            if (result != null) {
+                Log.i(TAG, "DocumentsContract.renameDocument 成功 → $result")
                 return true
             }
-            Log.w(TAG, "DocumentsContract.renameDocument 返回 null / 不存在，走 copy-fallback")
+            Log.w(TAG, "DocumentsContract.renameDocument 返回 null，走 copy-fallback")
         } catch (e: Throwable) {
             Log.w(TAG, "DocumentsContract.renameDocument 异常，走 copy-fallback", e)
         }
 
-        // 方案 2：copy-fallback（读内容 → 新建 → 删旧）
+        // 方案 2：copy-fallback（读内容 → 新建 → 删旧），全部走同步 API
         return renameByCopy(context, doc, newName)
     }
 
+    /**
+     * copy-fallback 重命名（同步，调用方已在 Dispatchers.IO 线程）。
+     */
     private fun renameByCopy(context: Context, doc: DocumentFile, newName: String): Boolean {
         return try {
-            val content = readFile(context, doc.uri)
+            val content = readFileBlocking(context, doc.uri)
 
             val parent = doc.parentFile ?: run {
                 Log.e(TAG, "copy-fallback: 取不到父目录")
@@ -229,8 +253,12 @@ object SafFileManager {
                 Log.e(TAG, "copy-fallback: 创建新文件失败 $newName")
                 return false
             }
-            writeFile(context, newDoc.uri, content)
-            deleteFile(context, doc.uri)
+            if (!writeFileBlocking(context, newDoc.uri, content)) {
+                Log.e(TAG, "copy-fallback: 写入新文件失败")
+                deleteFileBlocking(context, newDoc.uri)
+                return false
+            }
+            deleteFileBlocking(context, doc.uri)
             Log.i(TAG, "copy-fallback: 成功 $newName")
             true
         } catch (e: Throwable) {
@@ -241,13 +269,7 @@ object SafFileManager {
 
     suspend fun deleteFile(context: Context, fileUri: Uri): Boolean =
         withContext(Dispatchers.IO) {
-            try {
-                // 用 contentResolver 方式删除，避免 fromFileUri 不存在的问题
-                context.contentResolver.delete(fileUri, null, null) > 0
-            } catch (e: Exception) {
-                Log.e(TAG, "删除文件失败", e)
-                false
-            }
+            deleteFileBlocking(context, fileUri)
         }
 }
 
